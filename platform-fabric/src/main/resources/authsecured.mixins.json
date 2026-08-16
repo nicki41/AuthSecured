@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.example.authsecured.fabric.mixin",
+  "compatibilityLevel": "${java_compatibility}",
+  "mixins": [
+    "FoodDataMixin",
+    "ItemEntityMixin",
+    "ServerGamePacketListenerImplMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

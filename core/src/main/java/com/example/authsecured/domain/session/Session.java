@@ -1,6 +1,7 @@
 package com.example.authsecured.domain.session;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -19,7 +20,7 @@ public class Session {
         this.id = Objects.requireNonNull(id, "Session ID cannot be null");
         this.accountId = accountId;
         this.playerUuid = Objects.requireNonNull(playerUuid, "Player UUID cannot be null");
-        this.tokenHash = tokenHash;
+        this.tokenHash = tokenHash != null ? Arrays.copyOf(tokenHash, tokenHash.length) : null;
         this.serverId = serverId;
         this.createdAt = createdAt != null ? createdAt : Instant.now();
         this.expiresAt = Objects.requireNonNull(expiresAt, "ExpiresAt cannot be null");
@@ -27,12 +28,17 @@ public class Session {
     }
 
     public static Session create(Long accountId, UUID playerUuid, String serverId, long durationSeconds) {
+        return create(accountId, playerUuid, null, serverId, durationSeconds);
+    }
+
+    public static Session create(Long accountId, UUID playerUuid, byte[] ipHash,
+                                 String serverId, long durationSeconds) {
         Instant now = Instant.now();
         return new Session(
                 UUID.randomUUID(),
                 accountId,
                 playerUuid,
-                null,
+                ipHash,
                 serverId,
                 now,
                 now.plusSeconds(durationSeconds),
@@ -52,7 +58,9 @@ public class Session {
     public UUID getId() { return id; }
     public Long getAccountId() { return accountId; }
     public UUID getPlayerUuid() { return playerUuid; }
-    public byte[] getTokenHash() { return tokenHash; }
+    public byte[] getTokenHash() {
+        return tokenHash != null ? Arrays.copyOf(tokenHash, tokenHash.length) : null;
+    }
     public String getServerId() { return serverId; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getExpiresAt() { return expiresAt; }

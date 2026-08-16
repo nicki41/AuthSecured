@@ -3,6 +3,8 @@
 .gradle_home/
 build/
 bin/
+run/
+lib/
 
 # IDE files
 .idea/
@@ -29,5 +31,4 @@ auth.db
 
 # Internal documentation & specifications
 auth-secured-minecraft-architecture.md
-MODRINTH.md
 docs/

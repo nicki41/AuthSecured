@@ -84,7 +84,6 @@ public class Account {
         this.updatedAt = Instant.now();
     }
 
-    // Getters
     public Long getId() { return id; }
     public UUID getUuid() { return uuid; }
     public String getUsername() { return username; }

@@ -4,7 +4,7 @@ import java.io.File;
 import java.util.UUID;
 
 /**
- * Port representing the hosting Minecraft server platform (Paper / Purpur / Bukkit).
+ * Port representing the hosting Minecraft server platform.
  */
 public interface AuthPlatform {
     File getDataFolder();

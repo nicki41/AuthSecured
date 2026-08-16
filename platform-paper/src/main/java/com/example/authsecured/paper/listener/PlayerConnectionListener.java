@@ -49,7 +49,7 @@ public class PlayerConnectionListener implements Listener {
 
         InetSocketAddress socketAddress = player.getAddress();
         String rawIp = (socketAddress != null && socketAddress.getAddress() != null) ? socketAddress.getAddress().getHostAddress() : "";
-        String hashedIp = ipHashService.hashIpToString(rawIp);
+        byte[] hashedIp = ipHashService.hashIp(rawIp);
 
         authService.getSessionService().isValidActiveSession(uuid, hashedIp).thenAccept(hasActiveSession -> {
             Bukkit.getScheduler().runTask(plugin, () -> {

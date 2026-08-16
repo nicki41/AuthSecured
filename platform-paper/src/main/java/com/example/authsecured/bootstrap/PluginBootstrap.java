@@ -14,13 +14,14 @@ public class PluginBootstrap {
 
     private final JavaPlugin plugin;
     private DependencyContainer container;
+    private PlayerRestrictionManager restrictionManager;
 
     public PluginBootstrap(JavaPlugin plugin) {
         this.plugin = plugin;
     }
 
     public void enable() {
-        PlayerRestrictionManager restrictionManager = new PlayerRestrictionManager();
+        this.restrictionManager = new PlayerRestrictionManager();
         PaperPlayerRestrictionAdapter restrictionAdapter = new PaperPlayerRestrictionAdapter(restrictionManager);
         PaperAuthPlatform platform = new PaperAuthPlatform(plugin, restrictionAdapter);
 
@@ -44,34 +45,34 @@ public class PluginBootstrap {
         PluginManager pm = Bukkit.getPluginManager();
         pm.registerEvents(new PlayerConnectionListener(
                 container.getAuthService(),
-                container.getRestrictionManager(),
+                restrictionManager,
                 container.getConfigManager(),
                 container.getIpHashService(),
                 plugin
         ), plugin);
 
         pm.registerEvents(new PlayerAuthRestrictionListener(
-                container.getRestrictionManager(),
+                restrictionManager,
                 container.getConfigManager()
         ), plugin);
 
         pm.registerEvents(new PlayerCommandListener(
-                container.getRestrictionManager(),
+                restrictionManager,
                 container.getConfigManager()
         ), plugin);
 
         pm.registerEvents(new PlayerInteractionListener(
-                container.getRestrictionManager()
+                restrictionManager
         ), plugin);
     }
 
     private void registerCommands() {
-        registerCmd("login", new LoginCommand(container.getAuthService(), container.getRestrictionManager(), container.getConfigManager(), container.getIpHashService(), plugin));
-        registerCmd("register", new RegisterCommand(container.getAuthService(), container.getRestrictionManager(), container.getConfigManager(), container.getIpHashService(), plugin));
-        registerCmd("changepassword", new ChangePasswordCommand(container.getAuthService(), container.getRestrictionManager(), container.getConfigManager(), container.getIpHashService(), plugin));
+        registerCmd("login", new LoginCommand(container.getAuthService(), restrictionManager, container.getConfigManager(), container.getIpHashService(), plugin));
+        registerCmd("register", new RegisterCommand(container.getAuthService(), restrictionManager, container.getConfigManager(), container.getIpHashService(), plugin));
+        registerCmd("changepassword", new ChangePasswordCommand(container.getAuthService(), restrictionManager, container.getConfigManager(), container.getIpHashService(), plugin));
         registerCmd("authadmin", new AuthAdminCommand(container.getAuthService(), container.getConfigManager(), plugin));
-        registerCmd("logout", new LogoutCommand(container.getAuthService(), container.getRestrictionManager(), container.getConfigManager()));
-        registerCmd("authstatus", new AuthStatusCommand(container.getRestrictionManager()));
+        registerCmd("logout", new LogoutCommand(container.getAuthService(), restrictionManager, container.getConfigManager()));
+        registerCmd("authstatus", new AuthStatusCommand(restrictionManager));
     }
 
     private void registerCmd(String name, org.bukkit.command.CommandExecutor executor) {

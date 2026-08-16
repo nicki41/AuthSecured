@@ -30,24 +30,31 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
 
     @Override
     public CompletableFuture<Void> executeRegister(UUID playerUuid, String playerName, char[] password, char[] confirmPassword, String ipAddress) {
+        if (!Arrays.equals(password, confirmPassword)) {
+            platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid,
+                    localizationManager.getMessage("messages.passwords-dont-match", "§cPasswords do not match!")));
+            if (password != null) Arrays.fill(password, ' ');
+            if (confirmPassword != null) Arrays.fill(confirmPassword, ' ');
+            return CompletableFuture.completedFuture(null);
+        }
         byte[] ipHash = ipHashService.hashIp(ipAddress);
         return authService.register(playerUuid, playerName, password, ipHash)
                 .thenAccept(result -> platform.runTaskOnMainThread(() -> {
                     if (result == AuthResult.SUCCESS) {
                         platform.getRestrictionAdapter().setPlayerAuthenticated(playerUuid);
-                        platform.sendMessage(playerUuid, localizationManager.getMessage("register.success"));
+                        platform.sendMessage(playerUuid, localizationManager.getMessage("messages.register-success"));
                     } else {
                         String msgKey = switch (result) {
-                            case ALREADY_REGISTERED -> "register.already-registered";
-                            case VALIDATION_FAILED -> "register.policy-violation";
-                            case RATE_LIMITED -> "register.rate-limited";
-                            default -> "register.failed";
+                            case ALREADY_REGISTERED -> "messages.already-registered";
+                            case VALIDATION_FAILED -> "messages.password-policy-failed";
+                            case RATE_LIMITED -> "messages.rate-limited";
+                            default -> "messages.error";
                         };
                         platform.sendMessage(playerUuid, localizationManager.getMessage(msgKey));
                     }
                 }))
                 .exceptionally(throwable -> {
-                    platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid, localizationManager.getMessage("register.failed")));
+                    platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid, localizationManager.getMessage("messages.error")));
                     return null;
                 })
                 .whenComplete((v, ex) -> {
@@ -63,20 +70,19 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
                 .thenAccept(result -> platform.runTaskOnMainThread(() -> {
                     if (result == AuthResult.SUCCESS) {
                         platform.getRestrictionAdapter().setPlayerAuthenticated(playerUuid);
-                        platform.sendMessage(playerUuid, localizationManager.getMessage("login.success"));
+                        platform.sendMessage(playerUuid, localizationManager.getMessage("messages.login-success"));
                     } else {
                         String msgKey = switch (result) {
-                            case ACCOUNT_NOT_FOUND, NOT_REGISTERED -> "login.not-registered";
-                            case INVALID_PASSWORD -> "login.invalid-credentials";
-                            case ACCOUNT_LOCKED -> "login.account-locked";
-                            case RATE_LIMITED -> "login.rate-limited";
-                            default -> "login.failed";
+                            case ACCOUNT_NOT_FOUND, NOT_REGISTERED, INVALID_PASSWORD -> "messages.login-failed";
+                            case ACCOUNT_LOCKED -> "messages.account-locked";
+                            case RATE_LIMITED -> "messages.rate-limited";
+                            default -> "messages.error";
                         };
                         platform.sendMessage(playerUuid, localizationManager.getMessage(msgKey));
                     }
                 }))
                 .exceptionally(throwable -> {
-                    platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid, localizationManager.getMessage("login.failed")));
+                    platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid, localizationManager.getMessage("messages.error")));
                     return null;
                 })
                 .whenComplete((v, ex) -> {
@@ -90,18 +96,18 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
         return authService.changePassword(playerUuid, oldPassword, newPassword, ipHash)
                 .thenAccept(result -> platform.runTaskOnMainThread(() -> {
                     if (result == AuthResult.SUCCESS) {
-                        platform.sendMessage(playerUuid, localizationManager.getMessage("changepassword.success"));
+                        platform.sendMessage(playerUuid, localizationManager.getMessage("messages.changepass-success"));
                     } else {
                         String msgKey = switch (result) {
-                            case INVALID_PASSWORD -> "changepassword.invalid-old";
-                            case VALIDATION_FAILED -> "changepassword.policy-violation";
-                            default -> "changepassword.failed";
+                            case INVALID_PASSWORD -> "messages.old-password-invalid";
+                            case VALIDATION_FAILED -> "messages.password-policy-failed";
+                            default -> "messages.error";
                         };
                         platform.sendMessage(playerUuid, localizationManager.getMessage(msgKey));
                     }
                 }))
                 .exceptionally(throwable -> {
-                    platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid, localizationManager.getMessage("changepassword.failed")));
+                    platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid, localizationManager.getMessage("messages.error")));
                     return null;
                 })
                 .whenComplete((v, ex) -> {
@@ -112,15 +118,20 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
 
     @Override
     public CompletableFuture<Void> executeLogout(UUID playerUuid) {
-        platform.getRestrictionAdapter().setPlayerUnauthenticated(playerUuid, null);
-        platform.sendMessage(playerUuid, localizationManager.getMessage("logout.success"));
-        return CompletableFuture.completedFuture(null);
+        return authService.getSessionService().revokeActiveSessionForPlayer(playerUuid)
+                .whenComplete((ignored, throwable) -> platform.runTaskOnMainThread(() -> {
+                    platform.getRestrictionAdapter().setPlayerUnauthenticated(playerUuid, null);
+                    String key = throwable == null ? "messages.logged-out" : "messages.error";
+                    platform.sendMessage(playerUuid, localizationManager.getMessage(key));
+                }));
     }
 
     @Override
     public void executeAuthStatus(UUID playerUuid) {
         AuthState state = platform.getRestrictionAdapter().getAuthState(playerUuid);
-        String msgKey = (state == AuthState.AUTHENTICATED) ? "authstatus.authenticated" : "authstatus.unauthenticated";
-        platform.sendMessage(playerUuid, localizationManager.getMessage(msgKey));
+        String message = state == AuthState.AUTHENTICATED
+                ? "§aAuth Status: AUTHENTICATED"
+                : "§cAuth Status: AUTH_REQUIRED";
+        platform.sendMessage(playerUuid, message);
     }
 }

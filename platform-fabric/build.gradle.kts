@@ -1,0 +1,134 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.gradle.api.file.DuplicatesStrategy
+
+plugins {
+    id("com.gradleup.shadow")
+}
+
+val minecraftVersion = providers.gradleProperty("minecraft_version").get()
+apply(plugin = if (minecraftVersion.startsWith("26.")) {
+    "net.fabricmc.fabric-loom"
+} else {
+    "net.fabricmc.fabric-loom-remap"
+})
+val fabricApiVersions = mapOf(
+    "1.21" to "0.102.0+1.21",
+    "1.21.1" to "0.116.15+1.21.1",
+    "1.21.2" to "0.106.1+1.21.2",
+    "1.21.3" to "0.114.1+1.21.3",
+    "1.21.4" to "0.119.4+1.21.4",
+    "1.21.5" to "0.128.2+1.21.5",
+    "1.21.6" to "0.128.2+1.21.6",
+    "1.21.7" to "0.129.0+1.21.7",
+    "1.21.8" to "0.136.1+1.21.8",
+    "1.21.9" to "0.134.1+1.21.9",
+    "1.21.10" to "0.138.4+1.21.10",
+    "1.21.11" to "0.141.6+1.21.11",
+    "26.1" to "0.145.1+26.1",
+    "26.1.1" to "0.145.4+26.1.1",
+    "26.1.2" to "0.155.2+26.1.2",
+    "26.2" to "0.157.0+26.2"
+)
+val fabricApiVersion = fabricApiVersions[minecraftVersion]
+    ?: error("Unsupported minecraft_version '$minecraftVersion'. See SUPPORTED_VERSIONS.md.")
+val javaRelease = if (minecraftVersion.startsWith("26.")) 25 else 21
+val shade by configurations.creating
+
+dependencies {
+    add("minecraft", "com.mojang:minecraft:$minecraftVersion")
+    if (!minecraftVersion.startsWith("26.")) {
+        add("mappings", project.extensions.getByType<net.fabricmc.loom.api.LoomGradleExtensionAPI>()
+                .officialMojangMappings())
+    }
+    if (minecraftVersion.startsWith("26.")) {
+        implementation("net.fabricmc:fabric-loader:${property("fabric_loader_version")}")
+        implementation("net.fabricmc.fabric-api:fabric-api:$fabricApiVersion")
+    } else {
+        add("modImplementation", "net.fabricmc:fabric-loader:${property("fabric_loader_version")}")
+        add("modImplementation", "net.fabricmc.fabric-api:fabric-api:$fabricApiVersion")
+    }
+
+    implementation(project(":core"))
+    implementation(project(":database"))
+    implementation(project(":platform-common"))
+
+    shade(project(":core"))
+    shade(project(":database"))
+    shade(project(":platform-common"))
+
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+}
+
+java {
+    toolchain.languageVersion.set(JavaLanguageVersion.of(if (javaRelease == 25) 26 else 21))
+}
+
+sourceSets.main {
+    java.srcDir(if (minecraftVersion == "1.21" || minecraftVersion == "1.21.1") {
+        "src/legacy/java"
+    } else {
+        "src/modern/java"
+    })
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(javaRelease)
+}
+
+tasks.processResources {
+    inputs.property("version", project.version)
+    inputs.property("minecraft_version", minecraftVersion)
+    inputs.property("java_version", javaRelease)
+    filesMatching(listOf("fabric.mod.json", "authsecured.mixins.json")) {
+        expand(
+            "version" to project.version,
+            "minecraft_version" to minecraftVersion,
+            "java_version" to javaRelease,
+            "java_compatibility" to "JAVA_$javaRelease"
+        )
+    }
+}
+
+tasks.named<ShadowJar>("shadowJar") {
+    configurations = listOf(shade)
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    archiveBaseName.set("authsecured-fabric")
+    archiveVersion.set("${project.version}+mc$minecraftVersion")
+    archiveClassifier.set(if (minecraftVersion.startsWith("26.")) "" else "dev-shadow")
+    mergeServiceFiles()
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+    exclude("META-INF/LICENSE*", "META-INF/NOTICE*")
+    exclude("org/slf4j/**")
+
+    relocate("org.bouncycastle", "com.example.authsecured.libs.bouncycastle")
+    relocate("com.zaxxer.hikari", "com.example.authsecured.libs.hikari")
+    relocate("org.postgresql", "com.example.authsecured.libs.postgresql")
+    relocate("org.sqlite", "com.example.authsecured.libs.sqlite")
+    relocate("org.flywaydb", "com.example.authsecured.libs.flyway")
+    relocate("redis.clients.jedis", "com.example.authsecured.libs.jedis")
+    relocate("org.apache.commons.pool2", "com.example.authsecured.libs.commons.pool2")
+    relocate("org.yaml.snakeyaml", "com.example.authsecured.libs.snakeyaml")
+}
+
+tasks.jar {
+    archiveClassifier.set("dev")
+}
+
+if (minecraftVersion.startsWith("26.")) {
+    tasks.build {
+        dependsOn(tasks.shadowJar)
+    }
+} else {
+    tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
+        dependsOn(tasks.shadowJar)
+        inputFile.set(tasks.shadowJar.flatMap { it.archiveFile })
+        archiveBaseName.set("authsecured-fabric")
+        archiveVersion.set("${project.version}+mc$minecraftVersion")
+        archiveClassifier.set("")
+    }
+}
+
+tasks.test {
+    useJUnitPlatform()
+}
