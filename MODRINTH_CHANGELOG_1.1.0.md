@@ -23,6 +23,7 @@ dedicated-server mod while sharing the same authentication core and database.
 - `/register` validates password confirmation.
 - Paper listeners and commands now share one restriction-state manager.
 - Database integration tests are included in the standard build.
+- SQLite now loads correctly from the packaged Fabric and Paper JARs.
 
 ## Installation notes
 

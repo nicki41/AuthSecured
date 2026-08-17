@@ -104,7 +104,6 @@ tasks.named<ShadowJar>("shadowJar") {
     relocate("org.bouncycastle", "com.example.authsecured.libs.bouncycastle")
     relocate("com.zaxxer.hikari", "com.example.authsecured.libs.hikari")
     relocate("org.postgresql", "com.example.authsecured.libs.postgresql")
-    relocate("org.sqlite", "com.example.authsecured.libs.sqlite")
     relocate("org.flywaydb", "com.example.authsecured.libs.flyway")
     relocate("redis.clients.jedis", "com.example.authsecured.libs.jedis")
     relocate("org.apache.commons.pool2", "com.example.authsecured.libs.commons.pool2")
@@ -131,4 +130,17 @@ if (minecraftVersion.startsWith("26.")) {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+val verifySQLiteDriverInShadowJar by tasks.registering {
+    dependsOn(tasks.shadowJar)
+    doLast {
+        val archive = tasks.shadowJar.get().archiveFile.get().asFile
+        val nativeDb = zipTree(archive).matching { include("org/sqlite/core/NativeDB.class") }
+        check(!nativeDb.isEmpty) { "SQLite NativeDB is missing from ${archive.name}" }
+    }
+}
+
+tasks.build {
+    dependsOn(verifySQLiteDriverInShadowJar)
 }

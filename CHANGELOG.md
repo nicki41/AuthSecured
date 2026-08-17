@@ -19,6 +19,7 @@ All notable changes to this project will be documented in this file.
   and the core platform adapter.
 - Registration confirmation, localized command result keys, logout revocation,
   session IP verification, and non-persistent session behavior.
+- SQLite native loading in shaded Paper and Fabric release artifacts.
 - Database integration tests are now executed by the canonical Gradle test task.
 
 ### Changed
