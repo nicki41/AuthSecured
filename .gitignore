@@ -6,6 +6,32 @@ bin/
 run/
 lib/
 
+# Local Minecraft server installations
+servers/
+server/
+*-Server/
+*-server/
+server-*/
+mods/
+libraries/
+versions/
+world/
+world_nether/
+world_the_end/
+logs/
+crash-reports/
+fabric-server-launch.jar
+fabric-server-launcher.properties
+server.jar
+server.properties
+eula.txt
+banned-ips.json
+banned-players.json
+ops.json
+usercache.json
+whitelist.json
+ip-secret.txt
+
 # IDE files
 .idea/
 *.iml
