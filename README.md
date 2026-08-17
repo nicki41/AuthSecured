@@ -97,4 +97,4 @@ online-mode bypass, localization, and restriction settings. See
 
 [MIT](LICENSE)
 
-Authors: Antigravity, touchfalls.
+Author: touchfalls.

@@ -34,4 +34,4 @@ dedicated-server mod while sharing the same authentication core and database.
 - Minecraft 1.21.x requires Java 21; Minecraft 26.x requires Java 25 or newer.
 - Do not install both platform artifacts on the same server.
 
-Authors: Antigravity, touchfalls.
+Author: touchfalls.

@@ -41,6 +41,6 @@ the Paper and Fabric artifacts together.
 After the first start, set a private `AUTHSECURED_IP_SECRET` and review the
 generated database, online-mode, session, and restriction settings.
 
-Authors: Antigravity, touchfalls.
+Author: touchfalls.
 
 License: MIT.

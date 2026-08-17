@@ -4,7 +4,7 @@
   "version": "${version}",
   "name": "AuthSecured",
   "description": "Server-side authentication mod with Argon2id, SQLite/PostgreSQL, sessions and pre-auth restrictions.",
-  "authors": ["Antigravity", "touchfalls"],
+  "authors": ["touchfalls"],
   "license": "MIT",
   "environment": "server",
   "entrypoints": {
