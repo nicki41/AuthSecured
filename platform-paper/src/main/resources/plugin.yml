@@ -1,9 +1,9 @@
 name: AuthSecured
-version: 1.0.2
+version: '${version}'
 main: com.example.authsecured.AuthSecuredPlugin
-api-version: '1.20'
-author: Antigravity
-description: Production-ready Paper, Purpur, Spigot, and Leaf authentication plugin with Argon2id and Hexagonal Architecture.
+api-version: '1.21'
+author: touchfalls
+description: Authentication plugin for Paper, Purpur, Spigot, and Leaf 1.21 through current releases.
 
 commands:
   login:

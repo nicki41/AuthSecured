@@ -2,7 +2,12 @@ pluginManagement {
     repositories {
         mavenCentral()
         gradlePluginPortal()
-        maven("https://repo.papermc.io/repository/maven-public/")
+        maven("https://maven.fabricmc.net/") {
+            content { includeGroupByRegex("net\\.fabricmc.*") }
+        }
+        maven("https://repo.papermc.io/repository/maven-public/") {
+            content { includeGroupByRegex("io\\.papermc.*") }
+        }
     }
 }
 
@@ -14,5 +19,6 @@ rootProject.name = "AuthSecured"
 
 include("core")
 include("database")
+include("platform-common")
 include("platform-paper")
-
+include("platform-fabric")

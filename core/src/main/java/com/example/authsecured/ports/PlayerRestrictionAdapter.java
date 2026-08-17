@@ -5,7 +5,7 @@ import java.util.UUID;
 
 /**
  * Port for managing pre-authentication player restrictions.
- * Implemented by PaperPlayerRestrictionAdapter.
+ * Implemented by each platform adapter.
  */
 public interface PlayerRestrictionAdapter {
     void setPlayerAuthenticated(UUID playerUuid);

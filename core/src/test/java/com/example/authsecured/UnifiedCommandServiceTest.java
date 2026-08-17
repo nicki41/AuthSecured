@@ -1,6 +1,7 @@
 package com.example.authsecured;
 
 import com.example.authsecured.application.AuthService;
+import com.example.authsecured.application.SessionService;
 import com.example.authsecured.application.UnifiedCommandServiceImpl;
 import com.example.authsecured.domain.auth.AuthResult;
 import com.example.authsecured.domain.auth.AuthState;
@@ -89,9 +90,14 @@ class UnifiedCommandServiceTest {
     @DisplayName("Execute logout sets player unauthenticated")
     void testExecuteLogout() {
         UUID playerUuid = UUID.randomUUID();
+        SessionService sessionService = mock(SessionService.class);
+        when(authService.getSessionService()).thenReturn(sessionService);
+        when(sessionService.revokeActiveSessionForPlayer(playerUuid))
+                .thenReturn(CompletableFuture.completedFuture(null));
 
         commandExecutor.executeLogout(playerUuid).join();
 
+        verify(sessionService).revokeActiveSessionForPlayer(playerUuid);
         verify(restrictionAdapter).setPlayerUnauthenticated(playerUuid, null);
         verify(platform).sendMessage(eq(playerUuid), anyString());
     }

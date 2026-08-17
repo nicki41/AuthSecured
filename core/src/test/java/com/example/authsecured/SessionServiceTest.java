@@ -29,4 +29,41 @@ class SessionServiceTest {
         sessionService.revokeSession(session.getId()).join();
         Mockito.verify(repository).revoke(session.getId());
     }
+
+    @Test
+    void verifiesIpHashForPersistentSessions() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        UUID playerUuid = UUID.randomUUID();
+        byte[] expectedIpHash = {1, 2, 3};
+        Session session = Session.create(1L, playerUuid, expectedIpHash, "server1", 60);
+        Mockito.when(repository.findActiveByPlayerUuid(playerUuid))
+                .thenReturn(CompletableFuture.completedFuture(java.util.Optional.of(session)));
+
+        SessionService service = new SessionService(repository, true, true, 60, true);
+
+        assertTrue(service.isValidActiveSession(playerUuid, expectedIpHash).join());
+        assertFalse(service.isValidActiveSession(playerUuid, new byte[]{9, 9, 9}).join());
+    }
+
+    @Test
+    void nonPersistentSessionsStayInMemory() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        UUID playerUuid = UUID.randomUUID();
+        byte[] ipHash = {4, 5, 6};
+        SessionService service = new SessionService(repository, true, false, 60, true);
+
+        service.createSession(1L, playerUuid, ipHash, "server1").join();
+
+        assertTrue(service.isValidActiveSession(playerUuid, ipHash).join());
+        Mockito.verifyNoInteractions(repository);
+    }
+
+    @Test
+    void disabledSessionsNeverRestore() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        SessionService service = new SessionService(repository, false, true, 60, false);
+
+        assertFalse(service.isValidActiveSession(UUID.randomUUID(), null).join());
+        Mockito.verifyNoInteractions(repository);
+    }
 }

@@ -82,7 +82,8 @@ public class LoginService {
                                                         account.recordSuccessfulLogin(now);
                                                         return accountRepository.update(account)
                                                                 .thenCompose(v -> rateLimitService.recordSuccessfulLogin(normalized))
-                                                                .thenCompose(v -> sessionService.createSession(account.getId(), playerUuid, "default-server"))
+                                                                .thenCompose(v -> sessionService.createSession(
+                                                                        account.getId(), playerUuid, ipHash, "default-server"))
                                                                 .thenCompose(session -> securityService.logLoginAttempt(account.getId(), ipHash, true, "SUCCESS"))
                                                                 .thenCompose(v -> securityService.logSecurityEvent(account.getId(), SecurityEventType.LOGIN_SUCCESS, ipHash, "{}"))
                                                                 .thenApply(v -> AuthResult.SUCCESS);

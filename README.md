@@ -1,61 +1,100 @@
-# AuthSecured — Production-Ready Minecraft Auth System (v1.0.2)
+# AuthSecured 1.1.0
 
-An enterprise-grade, high-performance authentication plugin for **Paper, Purpur, Spigot, and Leaf** Minecraft servers (1.20+ / Java 21+). Built with **Hexagonal Architecture**, **Argon2id** password hashing (OWASP benchmarked), **dual DB support** (SQLite/PostgreSQL + Flyway), and **Redis rate limiting**.
+AuthSecured is one authentication codebase delivered as either a server plugin
+or a Fabric server mod. It supports Minecraft 1.21 through the current stable
+release, 26.2.
 
----
+## Platforms
 
-## 🌟 Key Features
+- Paper, Purpur, Spigot, and Leaf: install `authsecured-paper-1.1.0.jar` in
+  `plugins/`.
+- Fabric: install the JAR whose `+mc...` suffix exactly matches the Minecraft
+  version in `mods/`, together with the matching Fabric API release.
+- Minecraft 1.21.x requires Java 21. Minecraft 26.x requires Java 25 or newer.
 
-- **Paper, Purpur, Spigot & Leaf Support**: Runs natively as a high-performance Spigot/Paper server plugin.
-- **OWASP-Compliant Hashing**: Uses `Argon2id` via BouncyCastle to resist GPU/ASIC cracking.
-- **Dual Database Core**: Automatic Flyway migrations for both local SQLite (`auth.db`) and PostgreSQL clusters.
-- **Rate-Limiting Protection**: Account-based and IP-based brute force protection backed by Redis (or in-memory fallback).
-- **Session Auto-Login**: Optional persistent player session bypass across reconnects.
-- **Multi-Language i18n**: Out-of-the-box support for English (`en`), Russian (`ru`), Spanish (`es`), Italian (`it`), and French (`fr`).
-- **Granular Restrictions**: Customizable action restrictions for unauthenticated players (movement, chat, block break/place, damage, inventory, item pickup/drop, hunger).
-- **IP Hashing & Privacy**: Optional HMAC-SHA256 IP masking for GDPR compliance.
-- **Admin Commands**: In-game password resets, account unlocks, unregistration, real-time session duration management, and reload tools.
+The complete target list and Fabric API mapping are documented in
+[SUPPORTED_VERSIONS.md](SUPPORTED_VERSIONS.md).
 
----
+## Features
 
-## 🚀 Quick Start
+- Argon2id password hashing through Bouncy Castle.
+- SQLite by default, with PostgreSQL support and HikariCP connection pooling.
+- Account and IP rate limiting through Redis or an in-memory fallback.
+- Optional reconnect sessions with persistent/non-persistent storage and IP
+  verification.
+- English, Russian, Spanish, Italian, and French messages.
+- Pre-authentication restrictions for movement, chat, commands, inventory,
+  interaction, block actions, combat, item pickup/drop, and hunger.
+- Shared domain and application services across Paper and Fabric, with only the
+  server API adapters kept platform-specific.
 
-### Build Requirements
-- JDK 21+
-- Bash & Git
+## Build
 
-### Building the Project
-
-```bash
-# Clone the repository
-git clone https://github.com/touchfalls/authsecured.git
-cd authsecured
-
-# Run complete build and test suite
-bash build_and_test.sh
-```
-
-The resulting JAR will be generated in `build/libs/AuthSecured-1.0.2.jar`.
-
-## Commands & Permissions
-
-| Command | Usage | Description | Permission |
-|---------|-------|-------------|------------|
-| `/register` | `/register <pass> <confirm>` | Register a new account | Default |
-| `/login` | `/login <pass>` | Authenticate account | Default |
-| `/changepassword` | `/changepassword <old> <new>` | Change account password | Default |
-| `/logout` | `/logout` | Terminate session | Default |
-| `/authstatus` | `/authstatus` | Check authentication status | Default |
-| `/authadmin` | `/authadmin <reload\|unregister\|unlock\|resetpassword\|session>` | Administrative commands | `authsecured.admin` |
-
-## Building from Source
+Requirements: Bash and a JDK capable of running Gradle 9.5.1. Gradle toolchains
+select Java 21 for Minecraft 1.21.x and Java 25-compatible bytecode for 26.x.
 
 ```bash
-# Build shaded plugin JAR
-./gradlew shadowJar
+./build_and_test.sh
 ```
 
-The resulting JAR will be generated in `build/libs/AuthSecured-1.0.2.jar`.
+This runs every unit/integration test and builds:
+
+- `build/libs/authsecured-paper-1.1.0.jar`
+- `build/libs/authsecured-fabric-1.1.0+mc26.2.jar`
+
+Build every supported Fabric target:
+
+```bash
+./build_fabric_matrix.sh
+```
+
+Build one Fabric target:
+
+```bash
+./gradlew :platform-fabric:clean :platform-fabric:build -Pminecraft_version=1.21.11
+```
+
+## Installation
+
+1. Stop the server.
+2. Copy the correct artifact to `plugins/` (Paper-compatible server) or `mods/`
+   (Fabric server). Fabric also requires Fabric API for the exact game version.
+3. Start once to generate `config/authsecured/` on Fabric or
+   `plugins/AuthSecured/` on Paper.
+4. Set `AUTHSECURED_IP_SECRET` to a long random secret. Set database and Redis
+   environment variables when those integrations are enabled.
+5. Review online-mode bypass and all pre-authentication restrictions before
+   exposing the server publicly.
+
+Do not install both artifacts on the same server. They contain the same core but
+target different server APIs.
+
+## Commands
+
+| Command | Usage | Permission |
+| --- | --- | --- |
+| `/register` | `/register <password> <confirmation>` | everyone |
+| `/login` | `/login <password>` | everyone |
+| `/changepassword` | `/changepassword <old> <new>` | everyone |
+| `/logout` | `/logout` | everyone |
+| `/authstatus` | `/authstatus` | everyone |
+| `/authadmin reload` | reload configuration | `authsecured.admin` / operator |
+| `/authadmin unlock` | `/authadmin unlock <player>` | `authsecured.admin` / operator |
+| `/authadmin unregister` | `/authadmin unregister <player>` | `authsecured.admin` / operator |
+| `/authadmin resetpassword` | `/authadmin resetpassword <player> <new>` | `authsecured.admin` / operator |
+
+Paper permission plugins may grant `authsecured.admin`; Fabric uses the vanilla
+administrator permission level.
+
+## Configuration and deployment
+
+The generated configuration contains database, Redis, password policy, session,
+online-mode bypass, localization, and restriction settings. See
+[docs/deployment.md](docs/deployment.md) for production notes and
+[docs/architecture.md](docs/architecture.md) for module boundaries.
 
 ## License
-[MIT License](LICENSE)
+
+[MIT](LICENSE)
+
+Author: touchfalls.

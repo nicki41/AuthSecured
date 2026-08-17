@@ -2,10 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-08-17
+
+### Added
+- Restored Fabric as a production platform backed by the same core and database
+  modules as the Paper-compatible plugin.
+- Exact Fabric builds for every Minecraft release from 1.21 through 26.2, with
+  version-specific mappings, Fabric API dependencies, metadata, and Java levels.
+- Brigadier authentication/admin commands, lifecycle integration, reconnect
+  handling, and pre-authentication restrictions for Fabric dedicated servers.
+- A full Fabric version-matrix build script and shared `platform-common`
+  dependency graph.
+
+### Fixed
+- Paper now uses the same restriction manager instance for listeners, commands,
+  and the core platform adapter.
+- Registration confirmation, localized command result keys, logout revocation,
+  session IP verification, and non-persistent session behavior.
+- SQLite native loading in shaded Paper and Fabric release artifacts.
+- Database integration tests are now executed by the canonical Gradle test task.
+
+### Changed
+- Minimum supported Minecraft version is 1.21; current maximum is 26.2.
+- Build moved to Gradle 9.5.1, Shadow 9.6.1, and Fabric Loom 1.17.19.
+- Shared platform-independent bootstrapping moved out of the Paper module.
+
 ## [1.0.3] - 2026-08-01
 
 ### Added
-- Cleaned up `.vscode/settings.json` and enabled automatic Gradle project synchronization (`java.import.gradle.enabled`) for Antigravity IDE and VS Code Java extension.
+- Cleaned up `.vscode/settings.json` and enabled automatic Gradle project synchronization (`java.import.gradle.enabled`) for Java IDEs.
 
 ### Removed
 - Complete removal of Fabric module (`platform-fabric`), Fabric Loader dependencies, Fabric API listeners, Brigadier registrations, and Mixin configurations (architectural decision to maintain Fabric as a standalone repository).
@@ -27,7 +52,7 @@ All notable changes to this project will be documented in this file.
 - Granular unauthenticated player action restrictions in `config.yml` (`freeze-player`, `allow-flight`, `block-chat`, `block-commands`, `allowed-commands`, `block-inventory`, `block-interactions`, `block-block-break`, `block-block-place`, `block-damage-taken`, `block-damage-dealt`, `block-item-drop`, `block-item-pickup`, `block-hunger`).
 
 ### Fixed
-- Robust exception handling across all asynchronous futures, event listeners, and administrative command handlers.
+- Added exception handling for asynchronous operations, listeners, and administrative commands.
 - Safe password character array clearing in memory on both success and error execution paths.
 
 ### Changed
@@ -55,7 +80,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - Initial release of AuthSecured plugin.
-- Hexagonal Architecture & Clean Separation.
+- Separated domain, application, persistence, and server-platform modules.
 - Argon2id password hashing with BouncyCastle provider.
 - Dual database support: PostgreSQL & SQLite with Flyway migrations.
 - Rate limiting for per-account & per-IP abuse prevention.

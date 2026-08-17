@@ -2,7 +2,7 @@ package com.example.authsecured.ports;
 
 /**
  * Abstraction for platform-specific logger engines.
- * Implemented by PaperLogger adapter.
+ * Implemented by each platform adapter.
  */
 public interface PlatformLogger {
     void info(String message);

@@ -3,6 +3,7 @@ package com.example.authsecured.infrastructure.database;
 import com.example.authsecured.domain.auth.LoginAttempt;
 import com.example.authsecured.domain.security.SecurityEvent;
 import com.example.authsecured.ports.AuditRepository;
+import com.example.authsecured.ports.PlatformLogger;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -18,11 +19,14 @@ public class DatabaseAuditRepository implements AuditRepository {
     private final DataSource dataSource;
     private final ExecutorService executor;
     private final boolean isPostgres;
+    private final PlatformLogger logger;
 
-    public DatabaseAuditRepository(DataSource dataSource, ExecutorService executor, boolean isPostgres) {
+    public DatabaseAuditRepository(DataSource dataSource, ExecutorService executor, boolean isPostgres,
+                                   PlatformLogger logger) {
         this.dataSource = dataSource;
         this.executor = executor;
         this.isPostgres = isPostgres;
+        this.logger = logger;
     }
 
     @Override
@@ -49,7 +53,7 @@ public class DatabaseAuditRepository implements AuditRepository {
                 }
                 stmt.executeUpdate();
             } catch (SQLException e) {
-                // Log failure silently to maintain production safety
+                logger.warning("Failed to record login attempt: " + e.getMessage());
             }
         }, executor);
     }
@@ -76,7 +80,7 @@ public class DatabaseAuditRepository implements AuditRepository {
                 }
                 stmt.executeUpdate();
             } catch (SQLException e) {
-                // Log failure silently to maintain production safety
+                logger.warning("Failed to record security event: " + e.getMessage());
             }
         }, executor);
     }
@@ -106,7 +110,7 @@ public class DatabaseAuditRepository implements AuditRepository {
                     stmt.executeUpdate();
                 }
             } catch (SQLException e) {
-                // Background purge exception
+                logger.warning("Failed to purge audit records: " + e.getMessage());
             }
         }, executor);
     }
