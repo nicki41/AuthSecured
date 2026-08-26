@@ -57,6 +57,14 @@ public class PlayerAuthRestrictionListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onFlightToggle(PlayerToggleFlightEvent event) {
+        if (!restrictionManager.isAuthenticated(event.getPlayer().getUniqueId())
+                && !configManager.getBoolean("restrictions.allow-flight", false)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         if (!restrictionManager.isAuthenticated(event.getPlayer().getUniqueId())) {
             if (configManager.getBoolean("restrictions.block-block-break", true)) {

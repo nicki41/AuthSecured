@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-08-26
+
+### Added
+- Always-on redaction of password arguments from Fabric command diagnostics,
+  profiler labels, and debug exception logs.
+- Validation bounds for security, database, Redis, rate-limit, and session
+  numeric settings, plus PostgreSQL `ssl-mode` support.
+
+### Fixed
+- Fabric now stays fail-closed when core initialization fails, blocks flight
+  according to `restrictions.allow-flight`, and ignores stale asynchronous join
+  callbacks after a disconnect or rapid reconnect.
+- Invalid YAML reloads retain the last valid configuration snapshot.
+
+### Changed
+- Configuration lookups now use an immutable flattened snapshot, reducing work
+  in high-frequency movement and packet restriction checks.
+- `config.yml` now documents every active option, accepted values, units,
+  reload behavior, environment variables, and security-sensitive defaults.
+
 ## [1.1.0] - 2026-08-17
 
 ### Added

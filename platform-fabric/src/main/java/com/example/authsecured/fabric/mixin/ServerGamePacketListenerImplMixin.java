@@ -8,6 +8,7 @@ import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerAbilitiesPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -27,6 +28,15 @@ public abstract class ServerGamePacketListenerImplMixin {
     @Inject(method = "handleMovePlayer", at = @At("HEAD"), cancellable = true)
     private void authsecured$blockMovement(ServerboundMovePlayerPacket packet, CallbackInfo callback) {
         if (restricted("restrictions.freeze-player", true)) {
+            callback.cancel();
+        }
+    }
+
+    @Inject(method = "handlePlayerAbilities", at = @At("HEAD"), cancellable = true)
+    private void authsecured$blockFlight(ServerboundPlayerAbilitiesPacket packet, CallbackInfo callback) {
+        AuthSecuredFabricMod mod = AuthSecuredFabricMod.getInstance();
+        if (mod != null && mod.shouldBlockFlight(player.getUUID())) {
+            player.getAbilities().flying = false;
             callback.cancel();
         }
     }

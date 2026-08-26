@@ -1,22 +1,25 @@
 package com.example.authsecured.infrastructure.config;
 
 import com.example.authsecured.ports.PlatformLogger;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ConfigManager {
+public final class ConfigManager {
 
     private final File dataFolder;
     private final PlatformLogger logger;
     private final LocalizationManager localizationManager;
-    private Map<String, Object> configMap;
+    private volatile Map<String, Object> configValues = Map.of();
 
     public ConfigManager(File dataFolder, PlatformLogger logger) {
         this.dataFolder = dataFolder;
@@ -25,23 +28,32 @@ public class ConfigManager {
     }
 
     public void loadConfigurations() {
-        if (!dataFolder.exists()) {
-            dataFolder.mkdirs();
-        }
-
         File configFile = new File(dataFolder, "config.yml");
-        saveDefaultIfNotExists(configFile, "config.yml");
+        try {
+            Files.createDirectories(dataFolder.toPath());
+            saveDefaultIfNotExists(configFile, "config.yml");
 
-        Yaml yaml = new Yaml();
-        try (InputStream is = new FileInputStream(configFile)) {
-            configMap = yaml.load(is);
+            Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
+            Map<String, Object> loadedValues;
+            try (InputStream input = new FileInputStream(configFile)) {
+                Object loaded = yaml.load(input);
+                if (loaded == null) {
+                    loadedValues = Map.of();
+                } else if (loaded instanceof Map<?, ?> root) {
+                    loadedValues = flatten(root);
+                } else {
+                    throw new IllegalArgumentException("the YAML root must be a mapping");
+                }
+            }
+
+            // Publish a complete, immutable snapshot so event threads never see a
+            // partially reloaded configuration.
+            configValues = Collections.unmodifiableMap(loadedValues);
+            localizationManager.init(getString("language", "en"));
         } catch (Exception e) {
-            logger.severe("Failed to load config.yml: " + e.getMessage());
-            configMap = Collections.emptyMap();
+            logger.severe("Failed to load config.yml; keeping the last valid configuration: "
+                    + e.getMessage(), e);
         }
-
-        String language = getString("language", "en");
-        localizationManager.init(language);
     }
 
     private void saveDefaultIfNotExists(File targetFile, String resourceName) {
@@ -59,7 +71,7 @@ public class ConfigManager {
     }
 
     public String getString(String path, String defaultValue) {
-        Object val = getNestedValue(configMap, path);
+        Object val = getValue(path);
         if (val instanceof String str) {
             return resolveEnvVars(str);
         }
@@ -67,15 +79,28 @@ public class ConfigManager {
     }
 
     public int getInt(String path, int defaultValue) {
-        Object val = getNestedValue(configMap, path);
+        Object val = getValue(path);
         if (val instanceof Number num) {
             return num.intValue();
         }
         return defaultValue;
     }
 
+    public int getInt(String path, int defaultValue, int minimum, int maximum) {
+        if (minimum > maximum || defaultValue < minimum || defaultValue > maximum) {
+            throw new IllegalArgumentException("Invalid numeric bounds for " + path);
+        }
+        int value = getInt(path, defaultValue);
+        if (value < minimum || value > maximum) {
+            logger.warning("Configuration value '" + path + "' must be between " + minimum
+                    + " and " + maximum + "; using " + defaultValue + ".");
+            return defaultValue;
+        }
+        return value;
+    }
+
     public boolean getBoolean(String path, boolean defaultValue) {
-        Object val = getNestedValue(configMap, path);
+        Object val = getValue(path);
         if (val instanceof Boolean b) {
             return b;
         }
@@ -83,9 +108,9 @@ public class ConfigManager {
     }
 
     public List<String> getStringList(String path, List<String> defaultValue) {
-        Object val = getNestedValue(configMap, path);
-        if (val instanceof List<?> list) {
-            return list.stream().map(Object::toString).toList();
+        Object val = getValue(path);
+        if (val instanceof List<?> list && list.stream().allMatch(String.class::isInstance)) {
+            return list.stream().map(String.class::cast).toList();
         }
         return defaultValue;
     }
@@ -102,25 +127,35 @@ public class ConfigManager {
         return localizationManager;
     }
 
-    private Object getNestedValue(Map<String, Object> map, String path) {
-        if (map == null || path == null) return null;
-        String[] parts = path.split("\\.");
-        Map<String, Object> current = map;
-        for (int i = 0; i < parts.length - 1; i++) {
-            Object obj = current.get(parts[i]);
-            if (obj instanceof Map<?, ?>) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> castMap = (Map<String, Object>) obj;
-                current = castMap;
-            } else {
-                return null;
-            }
+    private Object getValue(String path) {
+        if (path == null || path.isBlank()) {
+            return null;
         }
-        return current.get(parts[parts.length - 1]);
+        return configValues.get(path);
     }
 
-    private String resolveEnvVars(String value) {
-        if (value == null) return null;
+    private static Map<String, Object> flatten(Map<?, ?> root) {
+        Map<String, Object> flattened = new LinkedHashMap<>();
+        flattenInto(root, "", flattened);
+        return flattened;
+    }
+
+    private static void flattenInto(Map<?, ?> source, String prefix, Map<String, Object> target) {
+        for (Map.Entry<?, ?> entry : source.entrySet()) {
+            if (!(entry.getKey() instanceof String key) || key.isBlank()) {
+                throw new IllegalArgumentException("all YAML keys must be non-empty strings");
+            }
+            String path = prefix.isEmpty() ? key : prefix + "." + key;
+            Object value = entry.getValue();
+            if (value instanceof Map<?, ?> nested) {
+                flattenInto(nested, path, target);
+            } else {
+                target.put(path, value);
+            }
+        }
+    }
+
+    private static String resolveEnvVars(String value) {
         if (value.startsWith("${ENV:") && value.endsWith("}")) {
             String envVarName = value.substring(6, value.length() - 1);
             String envValue = System.getenv(envVarName);

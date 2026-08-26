@@ -28,11 +28,11 @@ Paper-compatible servers use one plugin JAR across the supported range.
 
 ### Paper, Purpur, Spigot, or Leaf
 
-Place `authsecured-paper-1.1.0.jar` in `plugins/` and restart the server.
+Place `authsecured-paper-1.1.1.jar` in `plugins/` and restart the server.
 
 ### Fabric
 
-Place the exact `authsecured-fabric-1.1.0+mc<version>.jar` and the matching
+Place the exact `authsecured-fabric-1.1.1+mc<version>.jar` and the matching
 Fabric API in `mods/`, then restart the server.
 
 Minecraft 1.21.x uses Java 21. Minecraft 26.x uses Java 25 or newer. Do not load

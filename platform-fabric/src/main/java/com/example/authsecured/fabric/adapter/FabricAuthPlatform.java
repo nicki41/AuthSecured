@@ -72,4 +72,9 @@ public final class FabricAuthPlatform implements AuthPlatform {
         MinecraftServer currentServer = server;
         return currentServer != null && currentServer.usesAuthentication();
     }
+
+    public boolean isPlayerOnline(UUID playerUuid) {
+        MinecraftServer currentServer = server;
+        return currentServer != null && currentServer.getPlayerList().getPlayer(playerUuid) != null;
+    }
 }

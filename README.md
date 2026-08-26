@@ -1,4 +1,4 @@
-# AuthSecured 1.1.0
+# AuthSecured 1.1.1
 
 AuthSecured is one authentication codebase delivered as either a server plugin
 or a Fabric server mod. It supports Minecraft 1.21 through the current stable
@@ -6,7 +6,7 @@ release, 26.2.
 
 ## Platforms
 
-- Paper, Purpur, Spigot, and Leaf: install `authsecured-paper-1.1.0.jar` in
+- Paper, Purpur, Spigot, and Leaf: install `authsecured-paper-1.1.1.jar` in
   `plugins/`.
 - Fabric: install the JAR whose `+mc...` suffix exactly matches the Minecraft
   version in `mods/`, together with the matching Fabric API release.
@@ -25,6 +25,8 @@ The complete target list and Fabric API mapping are documented in
 - English, Russian, Spanish, Italian, and French messages.
 - Pre-authentication restrictions for movement, chat, commands, inventory,
   interaction, block actions, combat, item pickup/drop, and hunger.
+- Always-on redaction of authentication command arguments from Fabric command
+  diagnostics and debug exception logs.
 - Shared domain and application services across Paper and Fabric, with only the
   server API adapters kept platform-specific.
 
@@ -39,8 +41,8 @@ select Java 21 for Minecraft 1.21.x and Java 25-compatible bytecode for 26.x.
 
 This runs every unit/integration test and builds:
 
-- `build/libs/authsecured-paper-1.1.0.jar`
-- `build/libs/authsecured-fabric-1.1.0+mc26.2.jar`
+- `build/libs/authsecured-paper-1.1.1.jar`
+- `build/libs/authsecured-fabric-1.1.1+mc26.2.jar`
 
 Build every supported Fabric target:
 
@@ -65,6 +67,12 @@ Build one Fabric target:
    environment variables when those integrations are enabled.
 5. Review online-mode bypass and all pre-authentication restrictions before
    exposing the server publicly.
+
+Passwords are accepted as command arguments because Minecraft has no native
+masked server-command input. AuthSecured never logs those values and redacts the
+arguments of `/login`, `/register`, `/changepassword` (including aliases), and
+`/authadmin resetpassword` before Fabric passes command text to diagnostics.
+Players should still avoid reusing a password from any other service.
 
 Do not install both artifacts on the same server. They contain the same core but
 target different server APIs.

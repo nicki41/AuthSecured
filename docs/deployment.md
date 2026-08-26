@@ -10,8 +10,8 @@ Internet ──► Proxy (optional) ──► Paper/Purpur plugin or Fabric serv
 
 ## Platform installation
 
-- Paper-compatible server: copy `authsecured-paper-1.1.0.jar` to `plugins/`.
-- Fabric server: copy the exactly matching `authsecured-fabric-1.1.0+mc*.jar`
+- Paper-compatible server: copy `authsecured-paper-1.1.1.jar` to `plugins/`.
+- Fabric server: copy the exactly matching `authsecured-fabric-1.1.1+mc*.jar`
   and Fabric API to `mods/`.
 - Use Java 21 for Minecraft 1.21.x and Java 25 or newer for Minecraft 26.x.
 - Never load both AuthSecured artifacts in one server process.

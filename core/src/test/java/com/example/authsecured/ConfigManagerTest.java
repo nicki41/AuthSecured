@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -40,9 +41,10 @@ class ConfigManagerTest {
         assertEquals(65536, configManager.getInt("security.password.argon2.memory-kib", 65536));
         assertTrue(configManager.getBoolean("session.enabled", true));
 
-        List<String> allowedCommands = configManager.getStringList("security.allowed-commands", List.of("/login", "/register"));
+        List<String> allowedCommands = configManager.getStringList(
+                "restrictions.allowed-commands", List.of("/fallback"));
         assertNotNull(allowedCommands);
-        assertFalse(allowedCommands.isEmpty());
+        assertTrue(allowedCommands.contains("/login"));
     }
 
     @Test
@@ -51,5 +53,29 @@ class ConfigManagerTest {
         assertEquals("default_val", configManager.getString("nonexistent.path", "default_val"));
         assertEquals(999, configManager.getInt("nonexistent.int", 999));
         assertFalse(configManager.getBoolean("nonexistent.bool", false));
+    }
+
+    @Test
+    @DisplayName("Invalid numeric settings use safe bounded defaults")
+    void testBoundedIntegerFallback() throws Exception {
+        Files.writeString(new File(tempFolder, "config.yml").toPath(), "database:\n  port: 99999\n");
+        configManager.loadConfigurations();
+
+        assertEquals(5432, configManager.getInt("database.port", 5432, 1, 65535));
+    }
+
+    @Test
+    @DisplayName("A broken reload keeps the last valid configuration")
+    void testBrokenReloadKeepsLastValidSnapshot() throws Exception {
+        File configFile = new File(tempFolder, "config.yml");
+        Files.writeString(configFile.toPath(), "language: ru\nrestrictions:\n  freeze-player: false\n");
+        configManager.loadConfigurations();
+        assertFalse(configManager.getBoolean("restrictions.freeze-player", true));
+
+        Files.writeString(configFile.toPath(), "language: [broken\n");
+        configManager.loadConfigurations();
+
+        assertFalse(configManager.getBoolean("restrictions.freeze-player", true));
+        assertEquals("ru", configManager.getLocalizationManager().getCurrentLanguage());
     }
 }

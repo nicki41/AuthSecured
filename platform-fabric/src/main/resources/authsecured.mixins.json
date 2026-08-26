@@ -4,6 +4,7 @@
   "package": "com.example.authsecured.fabric.mixin",
   "compatibilityLevel": "${java_compatibility}",
   "mixins": [
+    "CommandsMixin",
     "FoodDataMixin",
     "ItemEntityMixin",
     "ServerGamePacketListenerImplMixin"

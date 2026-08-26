@@ -29,6 +29,8 @@ import com.example.authsecured.ports.UnifiedCommandExecutor;
 import redis.clients.jedis.JedisPool;
 
 import java.io.File;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Builds the platform-neutral authentication graph shared by Paper and Fabric.
@@ -62,18 +64,24 @@ public final class DependencyContainer implements AutoCloseable {
         }
         this.ipHashService = new IpHashService(ipHashSecret);
 
-        String dbType = configManager.getString("database.type", "sqlite");
+        String dbType = configManager.getString("database.type", "sqlite").toLowerCase(Locale.ROOT);
+        if (!Set.of("sqlite", "postgresql", "postgres").contains(dbType)) {
+            logger.warning("Unsupported database.type '" + dbType + "'; using sqlite.");
+            dbType = "sqlite";
+        }
         String host = configManager.getString("database.postgresql.host", "localhost");
-        int port = configManager.getInt("database.postgresql.port", 5432);
+        int port = configManager.getInt("database.postgresql.port", 5432, 1, 65535);
         String database = configManager.getString("database.postgresql.database", "authsecured");
         String username = configManager.getString("database.postgresql.username", "authsecured");
         String password = configManager.getString("database.postgresql.password-env", "");
-        int poolSize = configManager.getInt("database.postgresql.pool-size", 10);
+        String sslMode = configManager.getString("database.postgresql.ssl-mode",
+                configManager.getBoolean("database.postgresql.ssl", false) ? "require" : "prefer");
+        int poolSize = configManager.getInt("database.postgresql.pool-size", 10, 1, 64);
         String sqliteFile = new File(dataFolder,
                 configManager.getString("database.sqlite.file", "auth.db")).getAbsolutePath();
 
         this.databaseManager = new DatabaseManager(logger, dbType, host, port, database, username,
-                password, sqliteFile, poolSize);
+                password, sqliteFile, poolSize, sslMode);
 
         boolean postgres = databaseManager.isPostgres();
         AccountRepository accountRepository = postgres
@@ -85,27 +93,29 @@ public final class DependencyContainer implements AutoCloseable {
                 databaseManager.getDataSource(), databaseManager.getDbExecutor(), postgres, logger);
 
         PasswordHasher passwordHasher = new Argon2PasswordHasher(
-                configManager.getInt("security.password.argon2.memory-kib", 65536),
-                configManager.getInt("security.password.argon2.iterations", 3),
-                configManager.getInt("security.password.argon2.parallelism", 2),
-                configManager.getInt("security.password.argon2.hash-length", 32),
-                configManager.getInt("security.password.argon2.salt-length", 16));
+                configManager.getInt("security.password.argon2.memory-kib", 65536, 8192, 1_048_576),
+                configManager.getInt("security.password.argon2.iterations", 3, 1, 20),
+                configManager.getInt("security.password.argon2.parallelism", 2, 1, 32),
+                configManager.getInt("security.password.argon2.hash-length", 32, 16, 64),
+                configManager.getInt("security.password.argon2.salt-length", 16, 16, 64));
 
         RateLimitStore rateLimitStore = createRateLimitStore(logger);
-        int minLength = configManager.getInt("security.password.min-length", 10);
-        int maxLength = configManager.getInt("security.password.max-length", 128);
+        int minLength = configManager.getInt("security.password.min-length", 10, 8, 128);
+        int maxLength = configManager.getInt("security.password.max-length", 128, minLength, 1024);
         this.passwordService = new PasswordService(passwordHasher, minLength, maxLength, 4);
 
         int maxAccountAttempts = configManager.getInt(
-                "security.rate-limit.login.per-account.max-attempts", 5);
+                "security.rate-limit.login.per-account.max-attempts", 5, 1, 10_000);
         long accountWindowSeconds = configManager.getInt(
-                "security.rate-limit.login.per-account.window-seconds", 600);
+                "security.rate-limit.login.per-account.window-seconds", 600, 1, 86_400);
         long accountLockSeconds = configManager.getInt(
-                "security.rate-limit.login.per-account.lock-seconds", 900);
-        int maxIpAttempts = configManager.getInt("security.rate-limit.login.per-ip.max-attempts", 20);
+                "security.rate-limit.login.per-account.lock-seconds", 900, 1, 604_800);
+        int maxIpAttempts = configManager.getInt(
+                "security.rate-limit.login.per-ip.max-attempts", 20, 1, 100_000);
         long ipWindowSeconds = configManager.getInt(
-                "security.rate-limit.login.per-ip.window-seconds", 600);
-        long ipLockSeconds = configManager.getInt("security.rate-limit.login.per-ip.lock-seconds", 1800);
+                "security.rate-limit.login.per-ip.window-seconds", 600, 1, 86_400);
+        long ipLockSeconds = configManager.getInt(
+                "security.rate-limit.login.per-ip.lock-seconds", 1800, 1, 604_800);
 
         RateLimitService rateLimitService = new RateLimitService(
                 rateLimitStore,
@@ -115,13 +125,11 @@ public final class DependencyContainer implements AutoCloseable {
                 maxIpAttempts,
                 ipWindowSeconds,
                 ipLockSeconds,
-                configManager.getInt("security.registration.max-accounts-per-ip", 3),
-                configManager.getInt("security.registration.max-attempts-per-hour", 10));
+                configManager.getInt("security.registration.max-accounts-per-ip", 3, 1, 1_000),
+                configManager.getInt("security.registration.max-attempts-per-hour", 10, 1, 100_000));
 
-        long sessionTimeoutSeconds = configManager.getInt("session.timeout-seconds", 1800);
-        if (sessionTimeoutSeconds <= 0) {
-            sessionTimeoutSeconds = configManager.getInt("session.timeout-minutes", 30) * 60L;
-        }
+        long sessionTimeoutSeconds = configManager.getInt(
+                "session.timeout-seconds", 1800, 1, 2_592_000);
         this.sessionService = new SessionService(
                 sessionRepository,
                 configManager.getBoolean("session.enabled", true),
@@ -155,7 +163,7 @@ public final class DependencyContainer implements AutoCloseable {
 
         String redisUri = configManager.getString("redis.uri-env", "");
         String redisHost = configManager.getString("redis.host", "localhost");
-        int redisPort = configManager.getInt("redis.port", 6379);
+        int redisPort = configManager.getInt("redis.port", 6379, 1, 65535);
         try {
             this.jedisPool = redisUri != null && !redisUri.isBlank()
                     ? new JedisPool(redisUri)

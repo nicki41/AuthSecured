@@ -99,7 +99,7 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
             container.getSessionService().isValidActiveSession(uuid, ipHash)
                     .thenCompose(valid -> {
                         if (valid) {
-                            platform.runTaskOnMainThread(() -> {
+                            runForCurrentConnection(uuid, address, () -> {
                                 restrictionAdapter.setPlayerAuthenticated(uuid);
                                 platform.sendMessage(uuid, config.getMessage("messages.session-restored",
                                         "§aSession restored automatically!"));
@@ -107,7 +107,7 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
                             return java.util.concurrent.CompletableFuture.completedFuture(null);
                         }
                         return container.getAuthService().isRegistered(uuid).thenAccept(registered ->
-                                platform.runTaskOnMainThread(() -> platform.sendMessage(uuid, config.getMessage(
+                                runForCurrentConnection(uuid, address, () -> platform.sendMessage(uuid, config.getMessage(
                                         registered ? "messages.login-prompt" : "messages.register-prompt",
                                         registered
                                                 ? "§ePlease log in using /login <password>"
@@ -175,9 +175,13 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
     }
 
     public boolean isRestricted(UUID uuid, String configPath, boolean defaultValue) {
-        return initialized
-                && !restrictionAdapter.isAuthenticated(uuid)
-                && container.getConfigManager().getBoolean(configPath, defaultValue);
+        if (restrictionAdapter.isAuthenticated(uuid)) {
+            return false;
+        }
+        DependencyContainer currentContainer = container;
+        return !initialized || currentContainer == null
+                ? defaultValue
+                : currentContainer.getConfigManager().getBoolean(configPath, defaultValue);
     }
 
     public boolean isAllowedCommand(String command) {
@@ -193,8 +197,26 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
                 .anyMatch(normalized::equals);
     }
 
+    public boolean shouldBlockFlight(UUID uuid) {
+        if (restrictionAdapter.isAuthenticated(uuid)) {
+            return false;
+        }
+        DependencyContainer currentContainer = container;
+        return !initialized || currentContainer == null
+                || !currentContainer.getConfigManager().getBoolean("restrictions.allow-flight", false);
+    }
+
     public String message(String key, String fallback) {
         return initialized ? container.getConfigManager().getMessage(key, fallback) : fallback;
+    }
+
+    private void runForCurrentConnection(UUID uuid, String expectedAddress, Runnable task) {
+        platform.runTaskOnMainThread(() -> {
+            if (platform.isPlayerOnline(uuid)
+                    && expectedAddress.equals(playerAddresses.get(uuid))) {
+                task.run();
+            }
+        });
     }
 
     public static AuthSecuredFabricMod getInstance() {

@@ -11,30 +11,56 @@ import java.lang.reflect.Method;
  */
 final class FabricPermissionChecker {
 
+    private static final PermissionCheck ADMIN_CHECK = createAdminCheck();
+
     private FabricPermissionChecker() {
     }
 
     static boolean isAdmin(CommandSourceStack source) {
+        return ADMIN_CHECK.test(source);
+    }
+
+    private static PermissionCheck createAdminCheck() {
         try {
-            Method legacy = source.getClass().getMethod("hasPermission", int.class);
-            return (boolean) legacy.invoke(source, 4);
-        } catch (ReflectiveOperationException ignored) {
-            return hasModernPermission(source);
+            Method legacy = CommandSourceStack.class.getMethod("hasPermission", int.class);
+            return source -> invokeBoolean(legacy, source, 4);
+        } catch (NoSuchMethodException ignored) {
+            return createModernCheck();
         }
     }
 
-    private static boolean hasModernPermission(CommandSourceStack source) {
+    private static PermissionCheck createModernCheck() {
         try {
-            Object permissionSet = source.getClass().getMethod("permissions").invoke(source);
+            Method permissions = CommandSourceStack.class.getMethod("permissions");
             Class<?> permissionsClass = Class.forName("net.minecraft.server.permissions.Permissions");
             Class<?> permissionClass = Class.forName("net.minecraft.server.permissions.Permission");
             Field adminField = permissionsClass.getField("COMMANDS_ADMIN");
             Object adminPermission = adminField.get(null);
             Class<?> permissionSetClass = Class.forName("net.minecraft.server.permissions.PermissionSet");
             Method hasPermission = permissionSetClass.getMethod("hasPermission", permissionClass);
-            return (boolean) hasPermission.invoke(permissionSet, adminPermission);
+            return source -> {
+                try {
+                    Object permissionSet = permissions.invoke(source);
+                    return invokeBoolean(hasPermission, permissionSet, adminPermission);
+                } catch (ReflectiveOperationException exception) {
+                    return false;
+                }
+            };
+        } catch (ReflectiveOperationException exception) {
+            return source -> false;
+        }
+    }
+
+    private static boolean invokeBoolean(Method method, Object target, Object argument) {
+        try {
+            return (boolean) method.invoke(target, argument);
         } catch (ReflectiveOperationException exception) {
             return false;
         }
+    }
+
+    @FunctionalInterface
+    private interface PermissionCheck {
+        boolean test(CommandSourceStack source);
     }
 }

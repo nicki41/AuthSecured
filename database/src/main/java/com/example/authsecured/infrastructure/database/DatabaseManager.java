@@ -12,6 +12,8 @@ import java.io.InputStreamReader;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
@@ -25,14 +27,20 @@ public final class DatabaseManager {
 
     public DatabaseManager(PlatformLogger logger, String dbType, String host, int port, String database,
                            String username, String password, String sqlitePath, int poolSize) {
+        this(logger, dbType, host, port, database, username, password, sqlitePath, poolSize, "prefer");
+    }
+
+    public DatabaseManager(PlatformLogger logger, String dbType, String host, int port, String database,
+                           String username, String password, String sqlitePath, int poolSize,
+                           String sslMode) {
         this.logger = logger;
-        this.dbType = dbType.toLowerCase();
+        this.dbType = dbType.toLowerCase(Locale.ROOT);
         this.dbExecutor = Executors.newFixedThreadPool(Math.max(2, poolSize));
-        initDataSource(host, port, database, username, password, sqlitePath, poolSize);
+        initDataSource(host, port, database, username, password, sqlitePath, poolSize, sslMode);
     }
 
     private void initDataSource(String host, int port, String database, String username,
-                                String password, String sqlitePath, int poolSize) {
+                                String password, String sqlitePath, int poolSize, String sslMode) {
         HikariConfig config = new HikariConfig();
         config.setMaximumPoolSize(poolSize);
         config.setPoolName("AuthSecured-DB-Pool");
@@ -42,6 +50,7 @@ public final class DatabaseManager {
             config.setUsername(username);
             config.setPassword(password);
             config.setDriverClassName("org.postgresql.Driver");
+            config.addDataSourceProperty("sslmode", normalizeSslMode(sslMode));
             config.addDataSourceProperty("cachePrepStmts", "true");
             config.addDataSourceProperty("prepStmtCacheSize", "250");
             config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
@@ -53,6 +62,16 @@ public final class DatabaseManager {
 
         this.dataSource = new HikariDataSource(config);
         runMigrations();
+    }
+
+    private String normalizeSslMode(String sslMode) {
+        String normalized = sslMode == null ? "prefer" : sslMode.toLowerCase(Locale.ROOT);
+        if (Set.of("disable", "allow", "prefer", "require", "verify-ca", "verify-full")
+                .contains(normalized)) {
+            return normalized;
+        }
+        logger.warning("Unsupported PostgreSQL ssl-mode '" + sslMode + "'; using prefer.");
+        return "prefer";
     }
 
     public void runMigrations() {
