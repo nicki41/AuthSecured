@@ -4,6 +4,12 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GRADLE_CACHE_DIR="${GRADLE_USER_HOME:-$PROJECT_DIR/.gradle_home}"
 OUTPUT_DIR="$PROJECT_DIR/build/libs"
+PROJECT_VERSION="$(sed -n 's/.*version = "\([^"]*\)".*/\1/p' "$PROJECT_DIR/build.gradle.kts" | head -n 1)"
+
+if [ -z "$PROJECT_VERSION" ]; then
+    echo "Could not determine project version from build.gradle.kts" >&2
+    exit 2
+fi
 
 versions=(
     "1.21" "1.21.1" "1.21.2" "1.21.3" "1.21.4" "1.21.5"
@@ -40,7 +46,7 @@ for minecraft_version in "${versions[@]}"; do
         echo "Fabric build failed after 3 attempts: $minecraft_version" >&2
         exit 1
     fi
-    cp "$PROJECT_DIR/platform-fabric/build/libs/authsecured-fabric-1.2.0+mc$minecraft_version.jar" \
+    cp "$PROJECT_DIR/platform-fabric/build/libs/authsecured-fabric-$PROJECT_VERSION+mc$minecraft_version.jar" \
         "$OUTPUT_DIR/"
 done
 

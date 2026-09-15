@@ -1,4 +1,4 @@
-# AuthSecured 1.2.0
+# AuthSecured 1.2.1
 
 AuthSecured is one authentication codebase delivered as either a server plugin
 or a Fabric server mod. It supports Minecraft 1.21 through the current stable
@@ -6,7 +6,7 @@ release, 26.2.
 
 ## Platforms
 
-- Paper, Purpur, Spigot, and Leaf: install `authsecured-paper-1.2.0.jar` in
+- Paper, Purpur, Spigot, and Leaf: install `authsecured-paper-1.2.1.jar` in
   `plugins/`.
 - Fabric: install the JAR whose `+mc...` suffix exactly matches the Minecraft
   version in `mods/`, together with the matching Fabric API release.
@@ -49,8 +49,8 @@ select Java 21 for Minecraft 1.21.x and Java 25-compatible bytecode for 26.x.
 
 This runs every unit/integration test and builds:
 
-- `build/libs/authsecured-paper-1.2.0.jar`
-- `build/libs/authsecured-fabric-1.2.0+mc26.2.jar`
+- `build/libs/authsecured-paper-1.2.1.jar`
+- `build/libs/authsecured-fabric-1.2.1+mc26.2.jar`
 
 Build every supported Fabric target:
 
@@ -80,8 +80,10 @@ Passwords are accepted as command arguments because Minecraft has no native
 masked server-command input. AuthSecured never logs those values. Fabric redacts
 authentication arguments before diagnostics. Paper blocks its built-in raw
 command record before console formatting and also redacts the later command
-event. `/authadmin resetpassword` does not
-accept a password argument at all.
+event. `/authadmin resetpassword` does not accept a password argument at all.
+Its temporary password uses only safe letters and digits. An in-game
+administrator can copy it by clicking the highlighted password with the left
+mouse button.
 Players should still avoid reusing a password from any other service.
 
 Do not install both artifacts on the same server. They contain the same core but
@@ -111,10 +113,11 @@ Paper permission plugins may grant one operation or the parent
 `authsecured.admin` permission. Fabric permission levels are configurable per
 operation in `admin.fabric-permission-levels`.
 
-Failed-login alerts are disabled by default. Enable
-`notifications.login-failures.enabled`, then set `AUTHSECURED_DISCORD_WEBHOOK`
-or both `AUTHSECURED_TELEGRAM_BOT_TOKEN` and `AUTHSECURED_TELEGRAM_CHAT_ID` in
-the server environment. Restart after changing notification endpoints.
+Failed-login alerts are disabled by default. Enable the global switch and the
+desired `notifications.discord.enabled` or `notifications.telegram.enabled`
+channel. Credentials can be entered directly in `config.yml`, or more safely
+through `AUTHSECURED_DISCORD_WEBHOOK`, `AUTHSECURED_TELEGRAM_BOT_TOKEN`, and
+`AUTHSECURED_TELEGRAM_CHAT_ID`. Restart after changing notification endpoints.
 
 ## Configuration and deployment
 

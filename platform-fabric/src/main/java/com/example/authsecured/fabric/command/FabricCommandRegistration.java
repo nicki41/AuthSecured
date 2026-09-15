@@ -100,9 +100,11 @@ public final class FabricCommandRegistration {
         root.then(Commands.literal("reload")
                 .requires(source -> permitted(mod, source, "reload", 3))
                 .executes(context -> {
-                    mod.getContainer().reloadConfig();
-                    send(context.getSource(), message(mod, "messages.admin-reloaded",
-                            "&aConfiguration and localization reloaded."));
+                    boolean reloaded = mod.getContainer().reloadConfig();
+                    send(context.getSource(), message(mod,
+                            reloaded ? "messages.admin-reloaded" : "messages.admin-reload-failed",
+                            reloaded ? "&aConfiguration and localization reloaded."
+                                    : "&cReload rejected. The previous valid configuration is still active."));
                     return 1;
                 }));
 
@@ -213,10 +215,10 @@ public final class FabricCommandRegistration {
         }
         char[] password = reset.copyPassword();
         try {
-            send(source, message(mod, "messages.admin-temporary-password",
-                    "&eTemporary password for &f{player}&e: &f{password}", Map.of(
-                            "player", player,
-                            "password", new String(password))));
+            String passwordText = new String(password);
+            String prefix = message(mod, "messages.admin-temporary-password-prefix",
+                    "&eTemporary password for &f{player}&e: ", Map.of("player", player));
+            sendCopyable(source, prefix, passwordText);
             send(source, message(mod, "messages.admin-temporary-password-expires",
                     "&7Expires at: {expires}. The player must use /changepassword <temporary> <new>.",
                     Map.of("expires", reset.getExpiresAt().toString())));
@@ -250,6 +252,10 @@ public final class FabricCommandRegistration {
 
     private static void send(CommandSourceStack source, String message) {
         source.sendSystemMessage(Component.literal(message));
+    }
+
+    private static void sendCopyable(CommandSourceStack source, String prefix, String password) {
+        source.sendSystemMessage(FabricClipboardText.create(prefix, password));
     }
 
     private static String message(AuthSecuredFabricMod mod, String key, String fallback) {

@@ -41,6 +41,7 @@ public class PlayerConnectionListener implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
+        String playerName = player.getName();
 
         restrictionManager.setPlayerUnauthenticated(uuid, player.getLocation());
         authenticationTimeoutService.start(uuid);
@@ -59,7 +60,7 @@ public class PlayerConnectionListener implements Listener {
 
         authService.getSessionService().isValidActiveSession(uuid, hashedIp).thenAccept(hasActiveSession -> {
             Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) return;
+                if (!isCurrentPlayer(player, uuid)) return;
                 if (hasActiveSession) {
                     restrictionManager.setPlayerAuthenticated(uuid);
                     authenticationTimeoutService.clear(uuid);
@@ -67,7 +68,7 @@ public class PlayerConnectionListener implements Listener {
                 } else {
                     authService.isRegistered(uuid).thenAccept(registered -> {
                         Bukkit.getScheduler().runTask(plugin, () -> {
-                            if (!player.isOnline()) return;
+                            if (!isCurrentPlayer(player, uuid)) return;
                             if (registered) {
                                 player.sendMessage(configManager.getMessage("messages.login-prompt", "&ePlease log in using /login <password>"));
                             } else {
@@ -75,13 +76,13 @@ public class PlayerConnectionListener implements Listener {
                             }
                         });
                     }).exceptionally(ex -> {
-                        plugin.getLogger().severe("Registration status check failed for " + player.getName() + ".");
+                        plugin.getLogger().severe("Registration status check failed for " + playerName + ".");
                         return null;
                     });
                 }
             });
         }).exceptionally(ex -> {
-            plugin.getLogger().severe("Session validation failed for " + player.getName() + ".");
+            plugin.getLogger().severe("Session validation failed for " + playerName + ".");
             return null;
         });
     }
@@ -91,5 +92,9 @@ public class PlayerConnectionListener implements Listener {
         UUID uuid = event.getPlayer().getUniqueId();
         authenticationTimeoutService.clear(uuid);
         restrictionManager.removePlayer(uuid);
+    }
+
+    private static boolean isCurrentPlayer(Player player, UUID uuid) {
+        return player.isOnline() && Bukkit.getPlayer(uuid) == player;
     }
 }

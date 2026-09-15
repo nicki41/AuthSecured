@@ -4,8 +4,10 @@ import java.security.SecureRandom;
 
 public final class SecureRandomProvider {
     private static final SecureRandom RANDOM = new SecureRandom();
+    // Only unambiguous letters and digits are used. Minecraft command parsing can
+    // treat punctuation differently across clients, proxies and server versions.
     private static final char[] TEMPORARY_PASSWORD_ALPHABET =
-            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%".toCharArray();
+            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789".toCharArray();
 
     private SecureRandomProvider() {}
 

@@ -8,6 +8,7 @@ import com.example.authsecured.domain.auth.LoginAttempt;
 import com.example.authsecured.domain.security.SecurityEvent;
 import com.example.authsecured.domain.security.SecurityEventType;
 import com.example.authsecured.ports.PlatformLogger;
+import com.example.authsecured.ports.DuplicateAccountException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SqliteAccountRepositoryTest {
 
@@ -83,6 +85,36 @@ class SqliteAccountRepositoryTest {
     }
 
     @Test
+    void rejectsDuplicateUsernameWithSpecificException() {
+        repository.save(Account.createNew(UUID.randomUUID(), "Player", "player", "hash")).join();
+
+        java.util.concurrent.CompletionException error = assertThrows(
+                java.util.concurrent.CompletionException.class,
+                () -> repository.save(Account.createNew(
+                        UUID.randomUUID(), "PLAYER", "player", "hash")).join());
+
+        assertTrue(error.getCause() instanceof DuplicateAccountException);
+    }
+
+    @Test
+    void failedAttemptsAreUpdatedAtomically() {
+        Account saved = repository.save(Account.createNew(
+                UUID.randomUUID(), "AtomicUser", "atomicuser", "hash")).join();
+        Instant now = Instant.now();
+        java.util.List<java.util.concurrent.CompletableFuture<Boolean>> updates =
+                java.util.stream.IntStream.range(0, 20)
+                        .mapToObj(ignored -> repository.incrementFailedAttemptsAtomic(
+                                saved.getId(), 100, 900, now))
+                        .toList();
+        updates.forEach(java.util.concurrent.CompletableFuture::join);
+
+        Account updated = repository.findByUuid(saved.getUuid()).join().orElseThrow();
+        assertEquals(20, updated.getFailedLoginAttempts());
+        assertTrue(repository.resetFailedAttemptsAtomic(saved.getId(), now.plusSeconds(1)).join());
+        assertEquals(0, repository.findByUuid(saved.getUuid()).join().orElseThrow().getFailedLoginAttempts());
+    }
+
+    @Test
     void upgradesLegacySqliteAccountsTable(@TempDir Path legacyDir) throws Exception {
         File legacyFile = legacyDir.resolve("legacy.db").toFile();
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + legacyFile);
@@ -124,5 +156,6 @@ class SqliteAccountRepositoryTest {
         assertEquals("AuditUser", entries.get(0).username());
         assertEquals("ACCOUNT_UNLOCKED", entries.get(0).event());
         assertEquals("INVALID_PASSWORD", entries.get(1).reason());
+        assertEquals(0, databaseManager.getActiveConnections());
     }
 }

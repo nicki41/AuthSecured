@@ -34,6 +34,8 @@ import redis.clients.jedis.JedisPool;
 import java.io.File;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Builds the platform-neutral authentication graph shared by Paper and Fabric.
@@ -42,6 +44,7 @@ public final class DependencyContainer implements AutoCloseable {
 
     private final AuthPlatform platform;
     private JedisPool jedisPool;
+    private ExecutorService redisExecutor;
     private ConfigManager configManager;
     private DatabaseManager databaseManager;
     private IpHashService ipHashService;
@@ -63,7 +66,9 @@ public final class DependencyContainer implements AutoCloseable {
         PlatformLogger logger = platform.getLogger();
 
         this.configManager = new ConfigManager(dataFolder, logger);
-        this.configManager.loadConfigurations();
+        if (!this.configManager.loadConfigurations()) {
+            throw new IllegalStateException("AuthSecured configuration is invalid");
+        }
 
         String ipHashSecret = configManager.getString("security.ip-hashing.secret-env", "");
         this.ipHashSecretConfigured = ipHashSecret != null && !ipHashSecret.isBlank();
@@ -144,6 +149,7 @@ public final class DependencyContainer implements AutoCloseable {
                 configManager.getBoolean("session.persistent", true),
                 sessionTimeoutSeconds,
                 configManager.getBoolean("session.verify-ip", true));
+        this.sessionService.initialize().join();
 
         this.securityService = new SecurityService(
                 auditRepository, configManager.getBoolean("logging.audit.enabled", true));
@@ -184,7 +190,12 @@ public final class DependencyContainer implements AutoCloseable {
                     ? new JedisPool(redisUri)
                     : new JedisPool(redisHost, redisPort);
             this.rateLimitBackend = "redis";
-            return new RedisRateLimitStore(jedisPool, logger);
+            this.redisExecutor = Executors.newFixedThreadPool(2, runnable -> {
+                Thread thread = new Thread(runnable, "authsecured-redis");
+                thread.setDaemon(true);
+                return thread;
+            });
+            return new RedisRateLimitStore(jedisPool, logger, redisExecutor);
         } catch (RuntimeException exception) {
             logger.warning("Failed to initialize Redis pool; falling back to memory. Connection details are hidden.");
             this.rateLimitBackend = "memory-fallback";
@@ -196,17 +207,23 @@ public final class DependencyContainer implements AutoCloseable {
         if (!configManager.getBoolean("notifications.login-failures.enabled", false)) {
             return SecurityNotifier.NOOP;
         }
-        return new WebhookSecurityNotifier(
-                configManager.getString("notifications.discord.webhook-url-env", ""),
-                configManager.getString("notifications.telegram.bot-token-env", ""),
-                configManager.getString("notifications.telegram.chat-id-env", ""),
+        String discord = configManager.getBoolean("notifications.discord.enabled", true)
+                ? firstNonBlank(configManager.getString("notifications.discord.webhook-url", ""),
+                configManager.getString("notifications.discord.webhook-url-env", "")) : "";
+        String telegramToken = configManager.getBoolean("notifications.telegram.enabled", true)
+                ? firstNonBlank(configManager.getString("notifications.telegram.bot-token", ""),
+                configManager.getString("notifications.telegram.bot-token-env", "")) : "";
+        String telegramChat = configManager.getBoolean("notifications.telegram.enabled", true)
+                ? firstNonBlank(configManager.getString("notifications.telegram.chat-id", ""),
+                configManager.getString("notifications.telegram.chat-id-env", "")) : "";
+        return new WebhookSecurityNotifier(discord, telegramToken, telegramChat,
                 configManager.getInt("notifications.login-failures.cooldown-seconds", 300, 10, 86_400),
                 logger);
     }
 
-    public void reloadConfig() {
+    public boolean reloadConfig() {
         if (configManager != null) {
-            configManager.loadConfigurations();
+            if (!configManager.loadConfigurations()) return false;
             if (sessionService != null) {
                 sessionService.setTimeoutSeconds(configManager.getInt(
                         "session.timeout-seconds", (int) sessionService.getTimeoutSeconds(), 1, 2_592_000));
@@ -217,7 +234,9 @@ public final class DependencyContainer implements AutoCloseable {
                         configManager.getInt("auth-timeout.timeout-seconds",
                                 (int) authenticationTimeoutService.getTimeoutSeconds(), 5, 3_600));
             }
+            return true;
         }
+        return false;
     }
 
     @Override
@@ -230,6 +249,9 @@ public final class DependencyContainer implements AutoCloseable {
         }
         if (jedisPool != null && !jedisPool.isClosed()) {
             jedisPool.close();
+        }
+        if (redisExecutor != null) {
+            redisExecutor.shutdownNow();
         }
     }
 
@@ -271,5 +293,9 @@ public final class DependencyContainer implements AutoCloseable {
 
     public boolean isIpHashSecretConfigured() {
         return ipHashSecretConfigured;
+    }
+
+    private static String firstNonBlank(String primary, String fallback) {
+        return primary != null && !primary.isBlank() ? primary : (fallback == null ? "" : fallback);
     }
 }

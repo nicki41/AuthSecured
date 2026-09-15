@@ -18,6 +18,7 @@ public class SessionService {
     private final boolean persistent;
     private final AtomicLong timeoutSeconds;
     private final boolean verifyIp;
+    private final CompletableFuture<Void> initialization;
     private final Map<UUID, Session> volatileSessions = new ConcurrentHashMap<>();
 
     public SessionService(SessionRepository sessionRepository, boolean persistent, long timeoutMinutes) {
@@ -30,6 +31,13 @@ public class SessionService {
         this.persistent = persistent;
         this.timeoutSeconds = new AtomicLong(validateTimeout(timeoutSeconds));
         this.verifyIp = verifyIp;
+        this.initialization = persistent
+                ? CompletableFuture.completedFuture(null)
+                : sessionRepository.deleteAll();
+    }
+
+    public CompletableFuture<Void> initialize() {
+        return initialization;
     }
 
     public CompletableFuture<Session> createSession(Long accountId, UUID playerUuid, String serverId) {
@@ -43,8 +51,10 @@ public class SessionService {
             return CompletableFuture.completedFuture(session);
         }
         if (!persistent) {
-            volatileSessions.put(playerUuid, session);
-            return CompletableFuture.completedFuture(session);
+            return initialization.thenApply(ignored -> {
+                volatileSessions.put(playerUuid, session);
+                return session;
+            });
         }
         return sessionRepository.save(session).thenApply(v -> session);
     }
@@ -58,7 +68,7 @@ public class SessionService {
             return CompletableFuture.completedFuture(false);
         }
         if (!persistent) {
-            return CompletableFuture.completedFuture(isValid(volatileSessions.get(playerUuid), playerIpHash));
+            return initialization.thenApply(ignored -> isValid(volatileSessions.get(playerUuid), playerIpHash));
         }
         return sessionRepository.findActiveByPlayerUuid(playerUuid)
                 .thenApply(opt -> opt.map(session -> isValid(session, playerIpHash)).orElse(false));
@@ -66,8 +76,8 @@ public class SessionService {
 
     public CompletableFuture<Void> revokeSession(UUID sessionId) {
         if (!persistent) {
-            volatileSessions.entrySet().removeIf(entry -> entry.getValue().getId().equals(sessionId));
-            return CompletableFuture.completedFuture(null);
+            return initialization.thenRun(() ->
+                    volatileSessions.entrySet().removeIf(entry -> entry.getValue().getId().equals(sessionId)));
         }
         return sessionRepository.revoke(sessionId);
     }
@@ -75,16 +85,15 @@ public class SessionService {
     public CompletableFuture<Void> revokeAllSessionsForAccount(Long accountId) {
         if (accountId == null) return CompletableFuture.completedFuture(null);
         if (!persistent) {
-            volatileSessions.entrySet().removeIf(entry -> accountId.equals(entry.getValue().getAccountId()));
-            return CompletableFuture.completedFuture(null);
+            return initialization.thenRun(() -> volatileSessions.entrySet()
+                    .removeIf(entry -> accountId.equals(entry.getValue().getAccountId())));
         }
         return sessionRepository.revokeAllForAccount(accountId);
     }
 
     public CompletableFuture<Void> revokeActiveSessionForPlayer(UUID playerUuid) {
         if (!persistent) {
-            volatileSessions.remove(playerUuid);
-            return CompletableFuture.completedFuture(null);
+            return initialization.thenRun(() -> volatileSessions.remove(playerUuid));
         }
         return sessionRepository.findActiveByPlayerUuid(playerUuid)
                 .thenCompose(optSession -> {
@@ -97,9 +106,10 @@ public class SessionService {
 
     public CompletableFuture<Void> cleanupExpiredSessions() {
         if (!persistent) {
-            Instant now = Instant.now();
-            volatileSessions.entrySet().removeIf(entry -> !entry.getValue().isValid(now));
-            return CompletableFuture.completedFuture(null);
+            return initialization.thenRun(() -> {
+                Instant now = Instant.now();
+                volatileSessions.entrySet().removeIf(entry -> !entry.getValue().isValid(now));
+            });
         }
         return sessionRepository.deleteExpired();
     }

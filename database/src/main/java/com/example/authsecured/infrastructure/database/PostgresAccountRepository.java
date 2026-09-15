@@ -3,6 +3,7 @@ package com.example.authsecured.infrastructure.database;
 import com.example.authsecured.domain.account.Account;
 import com.example.authsecured.domain.account.AccountStatus;
 import com.example.authsecured.ports.AccountRepository;
+import com.example.authsecured.ports.DuplicateAccountException;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -101,6 +102,9 @@ public class PostgresAccountRepository implements AccountRepository {
                     }
                 }
             } catch (SQLException e) {
+                if (isUniqueConstraintViolation(e)) {
+                    throw new DuplicateAccountException("Account already exists", e);
+                }
                 throw new RuntimeException("Error saving account", e);
             }
             return account;
@@ -131,6 +135,48 @@ public class PostgresAccountRepository implements AccountRepository {
                 return stmt.executeUpdate() > 0;
             } catch (SQLException e) {
                 throw new RuntimeException("Error updating account", e);
+            }
+        }, executor);
+    }
+
+    @Override
+    public CompletableFuture<Boolean> incrementFailedAttemptsAtomic(Long accountId, int maxAttempts,
+                                                                     long lockDurationSeconds, Instant now) {
+        return CompletableFuture.supplyAsync(() -> {
+            String sql = "UPDATE accounts SET failed_login_attempts = failed_login_attempts + 1, "
+                    + "status = CASE WHEN failed_login_attempts + 1 >= ? AND status <> 'SUSPENDED' "
+                    + "THEN 'LOCKED' ELSE status END, "
+                    + "locked_until = CASE WHEN failed_login_attempts + 1 >= ? AND status <> 'SUSPENDED' "
+                    + "THEN ? ELSE locked_until END, "
+                    + "updated_at = ? WHERE id = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setInt(1, maxAttempts);
+                stmt.setInt(2, maxAttempts);
+                stmt.setTimestamp(3, Timestamp.from(now.plusSeconds(lockDurationSeconds)));
+                stmt.setTimestamp(4, Timestamp.from(now));
+                stmt.setLong(5, accountId);
+                return stmt.executeUpdate() > 0;
+            } catch (SQLException e) {
+                throw new RuntimeException("Error atomically incrementing failed attempts", e);
+            }
+        }, executor);
+    }
+
+    @Override
+    public CompletableFuture<Boolean> resetFailedAttemptsAtomic(Long accountId, Instant now) {
+        return CompletableFuture.supplyAsync(() -> {
+            String sql = "UPDATE accounts SET failed_login_attempts = 0, locked_until = NULL, "
+                    + "status = CASE WHEN status = 'LOCKED' THEN 'ACTIVE' ELSE status END, "
+                    + "last_login_at = ?, updated_at = ? WHERE id = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setTimestamp(1, Timestamp.from(now));
+                stmt.setTimestamp(2, Timestamp.from(now));
+                stmt.setLong(3, accountId);
+                return stmt.executeUpdate() > 0;
+            } catch (SQLException e) {
+                throw new RuntimeException("Error atomically resetting failed attempts", e);
             }
         }, executor);
     }
@@ -194,5 +240,14 @@ public class PostgresAccountRepository implements AccountRepository {
         return new Account(id, uuid, username, usernameNormalized, passwordHash, status,
                 failedAttempts, lockedUntil, createdAt, updatedAt, lastLoginAt, passwordChangedAt,
                 passwordChangeRequired, temporaryPasswordExpiresAt);
+    }
+
+    private static boolean isUniqueConstraintViolation(SQLException exception) {
+        SQLException current = exception;
+        while (current != null) {
+            if ("23505".equals(current.getSQLState())) return true;
+            current = current.getNextException();
+        }
+        return false;
     }
 }

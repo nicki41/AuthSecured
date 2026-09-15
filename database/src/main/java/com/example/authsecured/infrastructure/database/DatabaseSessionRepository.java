@@ -169,6 +169,18 @@ public class DatabaseSessionRepository implements SessionRepository {
         }, executor);
     }
 
+    @Override
+    public CompletableFuture<Void> deleteAll() {
+        return CompletableFuture.runAsync(() -> {
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement("DELETE FROM sessions")) {
+                stmt.executeUpdate();
+            } catch (SQLException e) {
+                throw new RuntimeException("Error clearing stored sessions", e);
+            }
+        }, executor);
+    }
+
     private Session mapResultSetToSession(ResultSet rs) throws SQLException {
         UUID id = isPostgres ? rs.getObject("id", UUID.class) : UUID.fromString(rs.getString("id"));
         Long accountId = rs.getLong("account_id");

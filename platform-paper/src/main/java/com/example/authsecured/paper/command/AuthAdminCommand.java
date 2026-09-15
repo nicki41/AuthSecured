@@ -3,6 +3,10 @@ package com.example.authsecured.paper.command;
 import com.example.authsecured.bootstrap.AdminOperations;
 import com.example.authsecured.bootstrap.DependencyContainer;
 import com.example.authsecured.domain.auth.TemporaryPasswordReset;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -50,9 +54,10 @@ public final class AuthAdminCommand implements TabExecutor {
             case "status" -> operations.status().whenComplete((lines, error) -> sendResult(sender, lines, error));
             case "doctor" -> operations.doctor().whenComplete((lines, error) -> sendResult(sender, lines, error));
             case "reload" -> {
-                container.reloadConfig();
-                sender.sendMessage(message("messages.admin-reloaded",
-                        "&aConfiguration and localization reloaded."));
+                boolean reloaded = container.reloadConfig();
+                sender.sendMessage(message(reloaded ? "messages.admin-reloaded" : "messages.admin-reload-failed",
+                        reloaded ? "&aConfiguration and localization reloaded."
+                                : "&cReload rejected. The previous valid configuration is still active."));
             }
             case "session" -> handleSession(sender, args);
             case "audit" -> handleAudit(sender, args);
@@ -150,10 +155,17 @@ public final class AuthAdminCommand implements TabExecutor {
     private void deliverTemporaryPassword(CommandSender sender, String target, TemporaryPasswordReset reset) {
         char[] password = reset.copyPassword();
         try {
-            sender.sendMessage(message("messages.admin-temporary-password",
-                    "&eTemporary password for &f{player}&e: &f{password}", Map.of(
-                            "player", target,
-                            "password", new String(password))));
+            String passwordText = new String(password);
+            LegacyComponentSerializer legacy = LegacyComponentSerializer.legacySection();
+            Component prefix = legacy.deserialize(message("messages.admin-temporary-password-prefix",
+                    "&eTemporary password for &f{player}&e: ", Map.of("player", target)));
+            Component secret = legacy.deserialize(message("messages.admin-temporary-password-copy",
+                            "&f{password}", Map.of("password", passwordText)))
+                    .clickEvent(ClickEvent.copyToClipboard(passwordText))
+                    .hoverEvent(HoverEvent.showText(legacy.deserialize(message(
+                            "messages.admin-temporary-password-hover",
+                            "&aClick to copy the temporary password."))));
+            sender.sendMessage(prefix.append(secret));
             sender.sendMessage(message("messages.admin-temporary-password-expires",
                     "&7Expires at: {expires}. The player must use /changepassword <temporary> <new>.",
                     Map.of("expires", reset.getExpiresAt().toString())));

@@ -114,6 +114,7 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
                     } else {
                         String msgKey = switch (result) {
                             case INVALID_PASSWORD -> "messages.old-password-invalid";
+                            case PASSWORD_UNCHANGED -> "messages.password-unchanged";
                             case VALIDATION_FAILED -> "messages.password-policy-failed";
                             default -> "messages.error";
                         };

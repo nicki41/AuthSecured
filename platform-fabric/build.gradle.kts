@@ -70,6 +70,16 @@ sourceSets.main {
     } else {
         "src/modern/java"
     })
+    java.srcDir(if (minecraftVersion in setOf("1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4")) {
+        "src/click-legacy/java"
+    } else {
+        "src/click-modern/java"
+    })
+    java.srcDir(if (minecraftVersion.startsWith("1.21") && minecraftVersion != "1.21.11") {
+        "src/permission-legacy/java"
+    } else {
+        "src/permission-modern/java"
+    })
 }
 
 tasks.withType<JavaCompile>().configureEach {

@@ -50,16 +50,17 @@ public class LoginService {
                 .thenCompose(ipLimited -> {
                     if (ipLimited) {
                         securityNotifier.loginFailure(username, "IP_RATE_LIMITED");
-                        securityService.logLoginAttempt(null, ipHash, false, "IP_RATE_LIMITED");
-                        return CompletableFuture.completedFuture(AuthResult.RATE_LIMITED);
+                        return securityService.logLoginAttempt(null, ipHash, false, "IP_RATE_LIMITED")
+                                .thenApply(ignored -> AuthResult.RATE_LIMITED);
                     }
 
                     return rateLimitService.isAccountRateLimited(normalized)
                             .thenCompose(accLimited -> {
                                 if (accLimited) {
                                     securityNotifier.loginFailure(username, "ACCOUNT_RATE_LIMITED");
-                                    securityService.logLoginAttempt(null, ipHash, false, "ACCOUNT_RATE_LIMITED");
-                                    return CompletableFuture.completedFuture(AuthResult.RATE_LIMITED);
+                                    return securityService.logLoginAttempt(null, ipHash, false,
+                                                    "ACCOUNT_RATE_LIMITED")
+                                            .thenApply(ignored -> AuthResult.RATE_LIMITED);
                                 }
 
                                 return accountRepository.findByUuid(playerUuid)
@@ -67,52 +68,66 @@ public class LoginService {
                                             if (optAccount.isEmpty()) {
                                                 // Timing protection: verify dummy hash if account not found
                                                 return passwordService.verifyDummyAsync(password)
-                                                        .thenCompose(ignored -> {
+                                                        .thenCompose(ignored -> rateLimitService
+                                                                .recordFailedLoginAttempt(normalized, ipHash))
+                                                        .thenCompose(ignored -> securityService.logLoginAttempt(
+                                                                null, ipHash, false, "INVALID_CREDENTIALS"))
+                                                        .thenApply(ignored -> {
                                                             securityNotifier.loginFailure(username, "INVALID_CREDENTIALS");
-                                                            securityService.logLoginAttempt(null, ipHash, false, "INVALID_CREDENTIALS");
-                                                            rateLimitService.recordFailedLoginAttempt(normalized, ipHash);
-                                                            return CompletableFuture.completedFuture(AuthResult.INVALID_PASSWORD);
+                                                            return AuthResult.INVALID_PASSWORD;
                                                         });
                                             }
 
                                             Account account = optAccount.get();
                                             Instant now = Instant.now();
-
-                                            if (account.isLocked(now)) {
-                                                securityNotifier.loginFailure(username, "ACCOUNT_LOCKED");
-                                                securityService.logLoginAttempt(account.getId(), ipHash, false, "ACCOUNT_LOCKED");
-                                                return CompletableFuture.completedFuture(AuthResult.ACCOUNT_LOCKED);
-                                            }
-
-                                            if (account.isTemporaryPasswordExpired(now)) {
-                                                securityService.logLoginAttempt(account.getId(), ipHash, false,
-                                                        "TEMPORARY_PASSWORD_EXPIRED");
-                                                securityService.logSecurityEvent(account.getId(),
-                                                        SecurityEventType.TEMPORARY_PASSWORD_EXPIRED, ipHash, "{}");
-                                                return CompletableFuture.completedFuture(AuthResult.TEMPORARY_PASSWORD_EXPIRED);
-                                            }
-
                                             return passwordService.verifyPasswordAsync(password, account.getPasswordHash())
                                                     .thenCompose(valid -> {
                                                         if (!valid) {
                                                             securityNotifier.loginFailure(username, "INVALID_PASSWORD");
-                                                            account.recordFailedAttempt(maxFailedAttempts, lockDurationSeconds, now);
-                                                            return accountRepository.update(account)
+                                                            return accountRepository.incrementFailedAttemptsAtomic(
+                                                                            account.getId(), maxFailedAttempts,
+                                                                            lockDurationSeconds, now)
+                                                                    .thenCompose(updated -> updated
+                                                                            ? CompletableFuture.completedFuture(null)
+                                                                            : CompletableFuture.failedFuture(
+                                                                                    new IllegalStateException("Account disappeared")))
                                                                     .thenCompose(v -> rateLimitService.recordFailedLoginAttempt(normalized, ipHash))
                                                                     .thenCompose(v -> securityService.logLoginAttempt(account.getId(), ipHash, false, "INVALID_PASSWORD"))
                                                                     .thenApply(v -> AuthResult.INVALID_PASSWORD);
                                                         }
 
-                                                        account.recordSuccessfulLogin(now);
+                                                        // Account state is checked only after Argon2 verification so
+                                                        // response time does not reveal lock or temporary-password state.
+                                                        if (account.isLocked(now)) {
+                                                            securityNotifier.loginFailure(username, "ACCOUNT_LOCKED");
+                                                            return securityService.logLoginAttempt(account.getId(), ipHash,
+                                                                            false, "ACCOUNT_LOCKED")
+                                                                    .thenApply(v -> AuthResult.ACCOUNT_LOCKED);
+                                                        }
+                                                        if (account.isTemporaryPasswordExpired(now)) {
+                                                            return securityService.logLoginAttempt(account.getId(), ipHash,
+                                                                            false, "TEMPORARY_PASSWORD_EXPIRED")
+                                                                    .thenCompose(v -> securityService.logSecurityEvent(
+                                                                            account.getId(), SecurityEventType.TEMPORARY_PASSWORD_EXPIRED,
+                                                                            ipHash, "{}"))
+                                                                    .thenApply(v -> AuthResult.TEMPORARY_PASSWORD_EXPIRED);
+                                                        }
+
                                                         if (account.isPasswordChangeRequired()) {
-                                                            return accountRepository.update(account)
-                                                                    .thenCompose(v -> rateLimitService.recordSuccessfulLogin(normalized))
+                                                            return accountRepository.resetFailedAttemptsAtomic(account.getId(), now)
+                                                                    .thenCompose(updated -> updated
+                                                                            ? rateLimitService.recordSuccessfulLogin(normalized)
+                                                                            : CompletableFuture.failedFuture(
+                                                                                    new IllegalStateException("Account disappeared")))
                                                                     .thenCompose(v -> securityService.logLoginAttempt(account.getId(), ipHash, true,
                                                                             "TEMPORARY_PASSWORD_ACCEPTED"))
                                                                     .thenApply(v -> AuthResult.PASSWORD_CHANGE_REQUIRED);
                                                         }
-                                                        return accountRepository.update(account)
-                                                                .thenCompose(v -> rateLimitService.recordSuccessfulLogin(normalized))
+                                                        return accountRepository.resetFailedAttemptsAtomic(account.getId(), now)
+                                                                .thenCompose(updated -> updated
+                                                                        ? rateLimitService.recordSuccessfulLogin(normalized)
+                                                                        : CompletableFuture.failedFuture(
+                                                                                new IllegalStateException("Account disappeared")))
                                                                 .thenCompose(v -> sessionService.createSession(
                                                                         account.getId(), playerUuid, ipHash, "default-server"))
                                                                 .thenCompose(session -> securityService.logLoginAttempt(account.getId(), ipHash, true, "SUCCESS"))

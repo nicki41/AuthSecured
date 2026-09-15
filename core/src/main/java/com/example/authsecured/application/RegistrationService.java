@@ -4,6 +4,7 @@ import com.example.authsecured.domain.account.Account;
 import com.example.authsecured.domain.auth.AuthResult;
 import com.example.authsecured.domain.security.SecurityEventType;
 import com.example.authsecured.ports.AccountRepository;
+import com.example.authsecured.ports.DuplicateAccountException;
 import com.example.authsecured.util.UsernameNormalizer;
 
 import java.util.UUID;
@@ -39,8 +40,9 @@ public class RegistrationService {
                 .thenCompose(count -> rateLimitService.isRegistrationAllowed(ipHash, count))
                 .thenCompose(allowed -> {
                     if (!allowed) {
-                        securityService.logSecurityEvent(null, SecurityEventType.RATE_LIMIT_EXCEEDED, ipHash, "{\"reason\":\"registration_limit\"}");
-                        return CompletableFuture.completedFuture(AuthResult.RATE_LIMITED);
+                        return securityService.logSecurityEvent(null, SecurityEventType.RATE_LIMIT_EXCEEDED,
+                                        ipHash, "{\"reason\":\"registration_limit\"}")
+                                .thenApply(ignored -> AuthResult.RATE_LIMITED);
                     }
 
                     return accountRepository.findByUsernameNormalized(normalizedUsername)
@@ -59,12 +61,24 @@ public class RegistrationService {
                                                         Account account = Account.createNew(playerUuid, username, normalizedUsername, hash);
                                                         return accountRepository.save(account)
                                                                 .thenCompose(savedAccount -> {
-                                                                    securityService.logSecurityEvent(savedAccount.getId(), SecurityEventType.REGISTER_SUCCESS, ipHash, "{}");
-                                                                    return CompletableFuture.completedFuture(AuthResult.SUCCESS);
+                                                                    return securityService.logSecurityEvent(savedAccount.getId(),
+                                                                                    SecurityEventType.REGISTER_SUCCESS, ipHash, "{}")
+                                                                            .thenApply(ignored -> AuthResult.SUCCESS);
                                                                 });
                                                     });
                                         });
                             });
-                }).exceptionally(ex -> AuthResult.INTERNAL_ERROR);
+                }).exceptionally(ex -> isDuplicateAccount(ex)
+                        ? AuthResult.ALREADY_REGISTERED
+                        : AuthResult.INTERNAL_ERROR);
+    }
+
+    private static boolean isDuplicateAccount(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof DuplicateAccountException) return true;
+            current = current.getCause();
+        }
+        return false;
     }
 }

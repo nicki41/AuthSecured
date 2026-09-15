@@ -85,12 +85,15 @@ public final class AdminOperations {
                     message("messages.admin-doctor-ip-secret-fail", "AUTHSECURED_IP_SECRET is missing"));
             boolean notificationEnabled = container.getConfigManager().getBoolean(
                     "notifications.login-failures.enabled", false);
-            boolean notificationTarget = !container.getConfigManager().getString(
-                    "notifications.discord.webhook-url-env", "").isBlank()
-                    || (!container.getConfigManager().getString(
-                    "notifications.telegram.bot-token-env", "").isBlank()
-                    && !container.getConfigManager().getString(
-                    "notifications.telegram.chat-id-env", "").isBlank());
+            boolean discordTarget = container.getConfigManager().getBoolean(
+                    "notifications.discord.enabled", true)
+                    && hasAnyValue("notifications.discord.webhook-url",
+                    "notifications.discord.webhook-url-env");
+            boolean telegramTarget = container.getConfigManager().getBoolean(
+                    "notifications.telegram.enabled", true)
+                    && hasAnyValue("notifications.telegram.bot-token", "notifications.telegram.bot-token-env")
+                    && hasAnyValue("notifications.telegram.chat-id", "notifications.telegram.chat-id-env");
+            boolean notificationTarget = discordTarget || telegramTarget;
             addCheck(lines, !notificationEnabled || notificationTarget,
                     message("messages.admin-doctor-alerts-ok", "Login alerts"),
                     message("messages.admin-doctor-alerts-fail",
@@ -179,5 +182,10 @@ public final class AdminOperations {
 
     private static String color(boolean healthy) {
         return healthy ? "§a" : "§c";
+    }
+
+    private boolean hasAnyValue(String directPath, String environmentPath) {
+        return !container.getConfigManager().getString(directPath, "").isBlank()
+                || !container.getConfigManager().getString(environmentPath, "").isBlank();
     }
 }

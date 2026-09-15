@@ -48,6 +48,7 @@ class SessionServiceTest {
     @Test
     void nonPersistentSessionsStayInMemory() {
         SessionRepository repository = Mockito.mock(SessionRepository.class);
+        Mockito.when(repository.deleteAll()).thenReturn(CompletableFuture.completedFuture(null));
         UUID playerUuid = UUID.randomUUID();
         byte[] ipHash = {4, 5, 6};
         SessionService service = new SessionService(repository, true, false, 60, true);
@@ -55,7 +56,8 @@ class SessionServiceTest {
         service.createSession(1L, playerUuid, ipHash, "server1").join();
 
         assertTrue(service.isValidActiveSession(playerUuid, ipHash).join());
-        Mockito.verifyNoInteractions(repository);
+        Mockito.verify(repository).deleteAll();
+        Mockito.verifyNoMoreInteractions(repository);
     }
 
     @Test

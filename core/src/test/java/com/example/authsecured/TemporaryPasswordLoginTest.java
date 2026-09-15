@@ -29,7 +29,8 @@ class TemporaryPasswordLoginTest {
         Account account = Account.createNew(uuid, "Player", "player", "temporary-hash");
         account.setTemporaryPassword("temporary-hash", Instant.now().plusSeconds(300));
         when(accounts.findByUuid(uuid)).thenReturn(CompletableFuture.completedFuture(Optional.of(account)));
-        when(accounts.update(account)).thenReturn(CompletableFuture.completedFuture(true));
+        when(accounts.resetFailedAttemptsAtomic(eq(account.getId()), any(Instant.class)))
+                .thenReturn(CompletableFuture.completedFuture(true));
         when(passwords.verifyPasswordAsync(any(char[].class), eq("temporary-hash")))
                 .thenReturn(CompletableFuture.completedFuture(true));
 
@@ -42,20 +43,22 @@ class TemporaryPasswordLoginTest {
     }
 
     @Test
-    void expiredTemporaryPasswordIsRejectedBeforeHashVerification() {
+    void expiredTemporaryPasswordIsRejectedAfterHashVerification() {
         AccountRepository accounts = mock(AccountRepository.class);
         PasswordService passwords = mock(PasswordService.class);
         UUID uuid = UUID.randomUUID();
         Account account = Account.createNew(uuid, "Player", "player", "temporary-hash");
         account.setTemporaryPassword("temporary-hash", Instant.now().minusSeconds(1));
         when(accounts.findByUuid(uuid)).thenReturn(CompletableFuture.completedFuture(Optional.of(account)));
+        when(passwords.verifyPasswordAsync(any(char[].class), eq("temporary-hash")))
+                .thenReturn(CompletableFuture.completedFuture(true));
 
         LoginService service = new LoginService(accounts, passwords, permissiveLimits(),
                 mock(SessionService.class), auditSink(), 5, 900);
 
         assertEquals(AuthResult.TEMPORARY_PASSWORD_EXPIRED,
                 service.login(uuid, "Player", "temporary".toCharArray(), new byte[]{1}).join());
-        verify(passwords, never()).verifyPasswordAsync(any(), anyString());
+        verify(passwords).verifyPasswordAsync(any(), eq("temporary-hash"));
     }
 
     private static RateLimitService permissiveLimits() {

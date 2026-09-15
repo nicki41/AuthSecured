@@ -59,11 +59,17 @@ public class AuthService {
                                 if (!valid) {
                                     return CompletableFuture.completedFuture(AuthResult.INVALID_PASSWORD);
                                 }
+                                if (constantTimeEquals(oldPassword, newPassword)) {
+                                    return CompletableFuture.completedFuture(AuthResult.PASSWORD_UNCHANGED);
+                                }
                                 return passwordService.hashPasswordAsync(newPassword)
                                         .thenCompose(newHash -> {
                                             account.updatePassword(newHash, java.time.Instant.now());
                                             return accountRepository.update(account)
-                                                    .thenCompose(v -> sessionService.revokeAllSessionsForAccount(account.getId()))
+                                                    .thenCompose(updated -> updated
+                                                            ? sessionService.revokeAllSessionsForAccount(account.getId())
+                                                            : CompletableFuture.failedFuture(
+                                                                    new IllegalStateException("Account update failed")))
                                                     .thenCompose(v -> securityService.logSecurityEvent(account.getId(), SecurityEventType.PASSWORD_CHANGE, ipHash, "{}"))
                                                     .thenApply(v -> AuthResult.SUCCESS);
                                         });
@@ -130,8 +136,10 @@ public class AuthService {
                     Account account = optAccount.get();
                     account.unlock();
                     return accountRepository.update(account)
-                            .thenCompose(v -> securityService.logSecurityEvent(account.getId(), SecurityEventType.ACCOUNT_UNLOCKED, null, "{}"))
-                            .thenApply(v -> true);
+                            .thenCompose(updated -> updated
+                                    ? securityService.logSecurityEvent(account.getId(),
+                                            SecurityEventType.ACCOUNT_UNLOCKED, null, "{}").thenApply(v -> true)
+                                    : CompletableFuture.completedFuture(false));
                 });
     }
 
@@ -151,8 +159,9 @@ public class AuthService {
                                 account.updatePassword(newHash, java.time.Instant.now());
                                 account.unlock();
                                 return accountRepository.update(account)
-                                        .thenCompose(v -> sessionService.revokeAllSessionsForAccount(account.getId()))
-                                        .thenApply(v -> true);
+                                        .thenCompose(updated -> updated
+                                                ? sessionService.revokeAllSessionsForAccount(account.getId()).thenApply(v -> true)
+                                                : CompletableFuture.completedFuture(false));
                             });
                 });
     }
@@ -175,5 +184,17 @@ public class AuthService {
 
     public SessionService getSessionService() {
         return sessionService;
+    }
+
+    private static boolean constantTimeEquals(char[] left, char[] right) {
+        if (left == null || right == null) return false;
+        int difference = left.length ^ right.length;
+        int length = Math.max(left.length, right.length);
+        for (int i = 0; i < length; i++) {
+            char leftChar = i < left.length ? left[i] : 0;
+            char rightChar = i < right.length ? right[i] : 0;
+            difference |= leftChar ^ rightChar;
+        }
+        return difference == 0;
     }
 }

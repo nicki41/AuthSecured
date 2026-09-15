@@ -13,4 +13,5 @@ public interface SessionRepository {
     CompletableFuture<Void> revoke(UUID sessionId);
     CompletableFuture<Void> revokeAllForAccount(Long accountId);
     CompletableFuture<Void> deleteExpired();
+    CompletableFuture<Void> deleteAll();
 }

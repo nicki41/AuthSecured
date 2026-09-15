@@ -6,7 +6,7 @@ plugins {
 
 allprojects {
     group = "com.example.authsecured"
-    version = "1.2.0"
+    version = "1.2.1"
 
     repositories {
         mavenCentral()

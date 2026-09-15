@@ -82,4 +82,28 @@ class ConfigManagerTest {
         assertFalse(configManager.getBoolean("restrictions.freeze-player", true));
         assertEquals("ru", configManager.getLocalizationManager().getCurrentLanguage());
     }
+
+    @Test
+    void oldConfigReceivesDocumentedNotificationSettings() throws Exception {
+        File configFile = new File(tempFolder, "config.yml");
+        Files.writeString(configFile.toPath(), "language: en\nsession:\n  timeout-seconds: 120\n");
+        ConfigManager migrated = new ConfigManager(tempFolder, DUMMY_LOGGER);
+
+        assertTrue(migrated.loadConfigurations());
+        String text = Files.readString(configFile.toPath());
+        assertTrue(text.contains("notifications:"));
+        assertTrue(text.contains("webhook-url:"));
+        assertTrue(text.contains("bot-token:"));
+        assertFalse(migrated.getBoolean("notifications.discord.enabled", true));
+    }
+
+    @Test
+    void invalidValidatedReloadKeepsPreviousSnapshot() throws Exception {
+        int original = configManager.getInt("session.timeout-seconds", 0);
+        Files.writeString(new File(tempFolder, "config.yml").toPath(),
+                "language: en\nsession:\n  timeout-seconds: 0\n");
+
+        assertFalse(configManager.loadConfigurations());
+        assertEquals(original, configManager.getInt("session.timeout-seconds", 0));
+    }
 }

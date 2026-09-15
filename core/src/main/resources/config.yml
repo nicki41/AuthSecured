@@ -164,12 +164,21 @@ notifications:
     cooldown-seconds: 300      # Allowed range: 10..86400
 
   discord:
-    # Example environment variable: AUTHSECURED_DISCORD_WEBHOOK
+    # Enable this channel and configure one of the two values below.
+    enabled: false
+    # Simple setup. Keep empty when using the environment variable.
+    # Treat this URL as a secret and restrict access to config.yml.
+    webhook-url: ""
+    # Safer production setup. Example variable: AUTHSECURED_DISCORD_WEBHOOK
     webhook-url-env: "${ENV:AUTHSECURED_DISCORD_WEBHOOK}"
 
   telegram:
-    # Create a bot with BotFather, then provide its token and target chat ID as
-    # environment variables. Never paste the bot token directly into this file.
+    # Enable this channel and configure either direct values or environment variables.
+    enabled: false
+    # Simple setup. The bot token is secret; keep these empty when using ENV.
+    bot-token: ""
+    chat-id: ""
+    # Safer production setup. Create the bot with BotFather and set both variables.
     bot-token-env: "${ENV:AUTHSECURED_TELEGRAM_BOT_TOKEN}"
     chat-id-env: "${ENV:AUTHSECURED_TELEGRAM_CHAT_ID}"
 

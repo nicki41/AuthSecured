@@ -60,4 +60,10 @@ class DatabaseSessionRepositoryTest {
         Optional<Session> revoked = repository.findActiveByPlayerUuid(playerUuid).join();
         assertTrue(revoked.isEmpty());
     }
+
+    @Test
+    void deleteAllClosesConnectionsAndRemovesStoredSessions() {
+        repository.deleteAll().join();
+        assertEquals(0, databaseManager.getActiveConnections());
+    }
 }

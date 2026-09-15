@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-09-15
+
+### Security
+- Existing accounts always complete Argon2 verification before lock and
+  temporary-password expiry responses, reducing account-state enumeration.
+- Failed login counters are updated atomically in SQLite and PostgreSQL.
+- Registration maps database uniqueness conflicts to an already-registered
+  result, closing the concurrent registration race.
+- Password changes reject the current password using a constant-time comparison.
+- Temporary passwords contain only unambiguous letters and digits.
+- Redis calls use a dedicated executor with timeout fallback instead of using
+  the shared asynchronous pool.
+
+### Added
+- Temporary passwords are clickable and copyable for in-game administrators on
+  Paper and Fabric.
+- Discord and Telegram settings now include explicit channel switches, direct
+  values, environment-variable values, and explanatory comments.
+- Existing configuration files without a notifications section are migrated
+  atomically on startup.
+
+### Fixed
+- Non-persistent mode clears stored database sessions before accepting session
+  operations, preventing stale persistent sessions from surviving a mode change.
+- Invalid but syntactically correct configuration values no longer replace the
+  active configuration during `/authadmin reload`.
+- Paper remains fail-closed and denies new logins if initialization fails.
+- Paper asynchronous join callbacks ignore disconnected or replaced players.
+- Database session and audit access consistently closes JDBC resources.
+
+### Changed
+- In-memory rate-limit counters use immutable values and atomic map updates.
+- All new player and administrator messages are translated in English, Russian,
+  Spanish, Italian, and French.
+
 ## [1.2.0] - 2026-09-15
 
 ### Added

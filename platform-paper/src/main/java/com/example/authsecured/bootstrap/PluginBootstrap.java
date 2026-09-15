@@ -31,7 +31,19 @@ public class PluginBootstrap {
         PaperAuthPlatform platform = new PaperAuthPlatform(plugin, restrictionAdapter);
 
         this.container = new DependencyContainer(platform);
-        this.container.init();
+        try {
+            this.container.init();
+        } catch (RuntimeException exception) {
+            this.container.close();
+            this.container = null;
+            Bukkit.getPluginManager().registerEvents(new InitializationFailureListener(), plugin);
+            for (org.bukkit.entity.Player player : Bukkit.getOnlinePlayers()) {
+                player.kickPlayer("AuthSecured failed to initialize. Contact the server administrator.");
+            }
+            plugin.getLogger().severe("AuthSecured initialization failed. New logins are blocked. "
+                    + "Sensitive configuration details are hidden.");
+            return;
+        }
 
         registerCommands();
         registerListeners();

@@ -6,17 +6,26 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 public class RedisRateLimitStore implements RateLimitStore {
 
     private final JedisPool jedisPool;
     private final MemoryRateLimitStore fallbackStore;
     private final PlatformLogger logger;
+    private final Executor executor;
 
     public RedisRateLimitStore(JedisPool jedisPool, PlatformLogger logger) {
+        this(jedisPool, logger, java.util.concurrent.ForkJoinPool.commonPool());
+    }
+
+    public RedisRateLimitStore(JedisPool jedisPool, PlatformLogger logger, Executor executor) {
         this.jedisPool = jedisPool;
         this.fallbackStore = new MemoryRateLimitStore();
         this.logger = logger;
+        this.executor = executor;
     }
 
     @Override
@@ -24,7 +33,7 @@ public class RedisRateLimitStore implements RateLimitStore {
         if (jedisPool == null) {
             return fallbackStore.incrementAndGet(key, windowSeconds);
         }
-        return CompletableFuture.supplyAsync(() -> {
+        return withFallback(CompletableFuture.supplyAsync(() -> {
             try (Jedis jedis = jedisPool.getResource()) {
                 long count = jedis.incr(key);
                 if (count == 1) {
@@ -32,10 +41,9 @@ public class RedisRateLimitStore implements RateLimitStore {
                 }
                 return (int) count;
             } catch (Exception e) {
-                logger.warning("Redis operation failed; using the in-memory fallback. Connection details are hidden.");
-                return fallbackStore.incrementAndGet(key, windowSeconds).join();
+                throw new IllegalStateException("Redis operation failed", e);
             }
-        });
+        }, executor), () -> fallbackStore.incrementAndGet(key, windowSeconds));
     }
 
     @Override
@@ -43,14 +51,13 @@ public class RedisRateLimitStore implements RateLimitStore {
         if (jedisPool == null) {
             return fallbackStore.isLocked(lockKey);
         }
-        return CompletableFuture.supplyAsync(() -> {
+        return withFallback(CompletableFuture.supplyAsync(() -> {
             try (Jedis jedis = jedisPool.getResource()) {
                 return jedis.exists(lockKey);
             } catch (Exception e) {
-                logger.warning("Redis operation failed; using the in-memory fallback. Connection details are hidden.");
-                return fallbackStore.isLocked(lockKey).join();
+                throw new IllegalStateException("Redis operation failed", e);
             }
-        });
+        }, executor), () -> fallbackStore.isLocked(lockKey));
     }
 
     @Override
@@ -58,14 +65,13 @@ public class RedisRateLimitStore implements RateLimitStore {
         if (jedisPool == null) {
             return fallbackStore.setLock(lockKey, lockSeconds);
         }
-        return CompletableFuture.runAsync(() -> {
+        return withFallback(CompletableFuture.runAsync(() -> {
             try (Jedis jedis = jedisPool.getResource()) {
                 jedis.setex(lockKey, lockSeconds, "LOCKED");
             } catch (Exception e) {
-                logger.warning("Redis operation failed; using the in-memory fallback. Connection details are hidden.");
-                fallbackStore.setLock(lockKey, lockSeconds).join();
+                throw new IllegalStateException("Redis operation failed", e);
             }
-        });
+        }, executor), () -> fallbackStore.setLock(lockKey, lockSeconds));
     }
 
     @Override
@@ -73,13 +79,21 @@ public class RedisRateLimitStore implements RateLimitStore {
         if (jedisPool == null) {
             return fallbackStore.reset(key);
         }
-        return CompletableFuture.runAsync(() -> {
+        return withFallback(CompletableFuture.runAsync(() -> {
             try (Jedis jedis = jedisPool.getResource()) {
                 jedis.del(key);
             } catch (Exception e) {
-                logger.warning("Redis operation failed; using the in-memory fallback. Connection details are hidden.");
-                fallbackStore.reset(key).join();
+                throw new IllegalStateException("Redis operation failed", e);
             }
+        }, executor), () -> fallbackStore.reset(key));
+    }
+
+    private <T> CompletableFuture<T> withFallback(CompletableFuture<T> operation,
+                                                   Supplier<CompletableFuture<T>> fallback) {
+        return operation.orTimeout(5, TimeUnit.SECONDS).exceptionallyCompose(error -> {
+            logger.warning("Redis operation failed or timed out; using the in-memory fallback. "
+                    + "Connection details are hidden.");
+            return fallback.get();
         });
     }
 }
