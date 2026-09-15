@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-09-15
+
+### Added
+- Configurable authentication deadline with automatic kick on Paper and Fabric.
+- `/authadmin status`, `/authadmin doctor`, runtime session timeout management,
+  audit viewing, tab completion, and operation-specific permissions.
+- Expiring temporary password reset that forces an immediate permanent password
+  change and revokes existing sessions.
+- Optional privacy-safe Discord webhook and Telegram bot alerts for failed
+  logins, with per-player cooldown.
+- Backward-compatible SQLite and PostgreSQL account schema migrations.
+
+### Fixed
+- `/authadmin session settimeout` now changes the live timeout used for newly
+  created sessions.
+- Paper blocks its built-in raw command log before formatting and also replaces
+  password-bearing command event text before normal dispatch.
+
+### Changed
+- Shared platform-neutral admin operations reduce duplicated Paper and Fabric
+  command logic.
+- Administrative errors and audit views no longer expose raw exception details,
+  IP addresses, credentials, webhook URLs, or bot tokens.
+- Infrastructure failures hide JDBC, Redis, YAML, and webhook exception details
+  so credentials cannot leak through diagnostic messages.
+
 ## [1.1.1] - 2026-08-26
 
 ### Added

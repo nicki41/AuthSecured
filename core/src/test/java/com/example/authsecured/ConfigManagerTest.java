@@ -40,6 +40,10 @@ class ConfigManagerTest {
         assertEquals("sqlite", configManager.getString("database.type", "sqlite"));
         assertEquals(65536, configManager.getInt("security.password.argon2.memory-kib", 65536));
         assertTrue(configManager.getBoolean("session.enabled", true));
+        assertTrue(configManager.getBoolean("auth-timeout.enabled", false));
+        assertEquals(60, configManager.getInt("auth-timeout.timeout-seconds", 0));
+        assertEquals(18, configManager.getInt("admin.temporary-password.length", 0));
+        assertFalse(configManager.getBoolean("notifications.login-failures.enabled", true));
 
         List<String> allowedCommands = configManager.getStringList(
                 "restrictions.allowed-commands", List.of("/fallback"));

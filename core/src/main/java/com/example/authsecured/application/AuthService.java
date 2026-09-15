@@ -2,12 +2,16 @@ package com.example.authsecured.application;
 
 import com.example.authsecured.domain.account.Account;
 import com.example.authsecured.domain.auth.AuthResult;
+import com.example.authsecured.domain.auth.TemporaryPasswordReset;
 import com.example.authsecured.domain.security.SecurityEventType;
+import com.example.authsecured.infrastructure.security.SecureRandomProvider;
 import com.example.authsecured.ports.AccountRepository;
 import com.example.authsecured.util.UsernameNormalizer;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.time.Instant;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 
 public class AuthService {
@@ -67,6 +71,53 @@ public class AuthService {
                 }).exceptionally(ex -> AuthResult.INTERNAL_ERROR);
     }
 
+    public CompletableFuture<TemporaryPasswordReset> issueTemporaryPassword(String username,
+                                                                              int passwordLength,
+                                                                              long expirySeconds) {
+        if (expirySeconds < 60 || expirySeconds > 86_400) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                    "Temporary password expiry must be between 60 and 86400 seconds"));
+        }
+        String normalized = UsernameNormalizer.normalize(username);
+        char[] temporaryPassword = SecureRandomProvider.generateTemporaryPassword(passwordLength);
+        Instant expiresAt = Instant.now().plusSeconds(expirySeconds);
+        return accountRepository.findByUsernameNormalized(normalized)
+                .thenCompose(optAccount -> {
+                    if (optAccount.isEmpty()) {
+                        Arrays.fill(temporaryPassword, '\0');
+                        return CompletableFuture.completedFuture(null);
+                    }
+                    Account account = optAccount.get();
+                    return passwordService.hashPasswordAsync(temporaryPassword)
+                            .thenCompose(hash -> {
+                                account.setTemporaryPassword(hash, expiresAt);
+                                account.unlock();
+                                return accountRepository.update(account)
+                                        .thenCompose(updated -> updated
+                                                ? sessionService.revokeAllSessionsForAccount(account.getId())
+                                                : CompletableFuture.failedFuture(new IllegalStateException("Account update failed")))
+                                        .thenCompose(v -> securityService.logSecurityEvent(account.getId(),
+                                                SecurityEventType.TEMPORARY_PASSWORD_ISSUED, null, "{}"))
+                                        .thenApply(v -> {
+                                            TemporaryPasswordReset reset = new TemporaryPasswordReset(
+                                                    temporaryPassword, expiresAt);
+                                            Arrays.fill(temporaryPassword, '\0');
+                                            return reset;
+                                        });
+                            });
+                })
+                .whenComplete((result, error) -> {
+                    if (error != null || result == null) {
+                        Arrays.fill(temporaryPassword, '\0');
+                    }
+                });
+    }
+
+    public CompletableFuture<Boolean> isPasswordChangeRequired(UUID playerUuid) {
+        return accountRepository.findByUuid(playerUuid)
+                .thenApply(account -> account.map(Account::isPasswordChangeRequired).orElse(false));
+    }
+
     public CompletableFuture<Boolean> isRegistered(UUID playerUuid) {
         return accountRepository.findByUuid(playerUuid).thenApply(Optional::isPresent);
     }
@@ -84,6 +135,8 @@ public class AuthService {
                 });
     }
 
+    /** @deprecated Use {@link #issueTemporaryPassword(String, int, long)} to avoid secret command arguments. */
+    @Deprecated
     public CompletableFuture<Boolean> resetPassword(String username, char[] newPassword) {
         if (!passwordService.validatePolicy(newPassword)) {
             return CompletableFuture.completedFuture(false);

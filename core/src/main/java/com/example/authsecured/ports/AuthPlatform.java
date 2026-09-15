@@ -13,4 +13,6 @@ public interface AuthPlatform {
     void sendMessage(UUID playerUuid, String message);
     void runTaskOnMainThread(Runnable task);
     boolean isOnlineMode();
+    boolean isPlayerOnline(UUID playerUuid);
+    void disconnectPlayer(UUID playerUuid, String reason);
 }

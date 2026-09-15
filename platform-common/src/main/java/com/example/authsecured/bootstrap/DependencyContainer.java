@@ -8,6 +8,7 @@ import com.example.authsecured.application.RegistrationService;
 import com.example.authsecured.application.SecurityService;
 import com.example.authsecured.application.SessionService;
 import com.example.authsecured.application.UnifiedCommandServiceImpl;
+import com.example.authsecured.application.AuthenticationTimeoutService;
 import com.example.authsecured.infrastructure.config.ConfigManager;
 import com.example.authsecured.infrastructure.database.DatabaseAuditRepository;
 import com.example.authsecured.infrastructure.database.DatabaseManager;
@@ -18,6 +19,7 @@ import com.example.authsecured.infrastructure.redis.MemoryRateLimitStore;
 import com.example.authsecured.infrastructure.redis.RedisRateLimitStore;
 import com.example.authsecured.infrastructure.security.Argon2PasswordHasher;
 import com.example.authsecured.infrastructure.security.IpHashService;
+import com.example.authsecured.infrastructure.notification.WebhookSecurityNotifier;
 import com.example.authsecured.ports.AccountRepository;
 import com.example.authsecured.ports.AuditRepository;
 import com.example.authsecured.ports.AuthPlatform;
@@ -26,6 +28,7 @@ import com.example.authsecured.ports.PlatformLogger;
 import com.example.authsecured.ports.RateLimitStore;
 import com.example.authsecured.ports.SessionRepository;
 import com.example.authsecured.ports.UnifiedCommandExecutor;
+import com.example.authsecured.ports.SecurityNotifier;
 import redis.clients.jedis.JedisPool;
 
 import java.io.File;
@@ -45,7 +48,11 @@ public final class DependencyContainer implements AutoCloseable {
     private PasswordService passwordService;
     private SessionService sessionService;
     private AuthService authService;
+    private SecurityService securityService;
+    private AuthenticationTimeoutService authenticationTimeoutService;
     private UnifiedCommandExecutor commandExecutor;
+    private String rateLimitBackend = "memory";
+    private boolean ipHashSecretConfigured;
 
     public DependencyContainer(AuthPlatform platform) {
         this.platform = platform;
@@ -59,7 +66,8 @@ public final class DependencyContainer implements AutoCloseable {
         this.configManager.loadConfigurations();
 
         String ipHashSecret = configManager.getString("security.ip-hashing.secret-env", "");
-        if (ipHashSecret == null || ipHashSecret.isBlank()) {
+        this.ipHashSecretConfigured = ipHashSecret != null && !ipHashSecret.isBlank();
+        if (!ipHashSecretConfigured) {
             logger.warning("AUTHSECURED_IP_SECRET is not set; configure a private value before production use.");
         }
         this.ipHashService = new IpHashService(ipHashSecret);
@@ -137,8 +145,9 @@ public final class DependencyContainer implements AutoCloseable {
                 sessionTimeoutSeconds,
                 configManager.getBoolean("session.verify-ip", true));
 
-        SecurityService securityService = new SecurityService(
+        this.securityService = new SecurityService(
                 auditRepository, configManager.getBoolean("logging.audit.enabled", true));
+        SecurityNotifier securityNotifier = createSecurityNotifier(logger);
         RegistrationService registrationService = new RegistrationService(
                 accountRepository, passwordService, rateLimitService, securityService);
         LoginService loginService = new LoginService(
@@ -148,16 +157,22 @@ public final class DependencyContainer implements AutoCloseable {
                 sessionService,
                 securityService,
                 maxAccountAttempts,
-                accountLockSeconds);
+                accountLockSeconds,
+                securityNotifier);
+
+        this.authenticationTimeoutService = new AuthenticationTimeoutService(
+                configManager.getBoolean("auth-timeout.enabled", true),
+                configManager.getInt("auth-timeout.timeout-seconds", 60, 5, 3_600));
 
         this.authService = new AuthService(registrationService, loginService, passwordService,
                 sessionService, securityService, accountRepository);
         this.commandExecutor = new UnifiedCommandServiceImpl(authService, platform,
-                configManager.getLocalizationManager(), ipHashService);
+                configManager.getLocalizationManager(), ipHashService, authenticationTimeoutService);
     }
 
     private RateLimitStore createRateLimitStore(PlatformLogger logger) {
         if (!configManager.getBoolean("redis.enabled", false)) {
+            this.rateLimitBackend = "memory";
             return new MemoryRateLimitStore();
         }
 
@@ -168,17 +183,40 @@ public final class DependencyContainer implements AutoCloseable {
             this.jedisPool = redisUri != null && !redisUri.isBlank()
                     ? new JedisPool(redisUri)
                     : new JedisPool(redisHost, redisPort);
+            this.rateLimitBackend = "redis";
             return new RedisRateLimitStore(jedisPool, logger);
         } catch (RuntimeException exception) {
-            logger.warning("Failed to initialize Redis pool, falling back to memory: "
-                    + exception.getMessage());
+            logger.warning("Failed to initialize Redis pool; falling back to memory. Connection details are hidden.");
+            this.rateLimitBackend = "memory-fallback";
             return new MemoryRateLimitStore();
         }
+    }
+
+    private SecurityNotifier createSecurityNotifier(PlatformLogger logger) {
+        if (!configManager.getBoolean("notifications.login-failures.enabled", false)) {
+            return SecurityNotifier.NOOP;
+        }
+        return new WebhookSecurityNotifier(
+                configManager.getString("notifications.discord.webhook-url-env", ""),
+                configManager.getString("notifications.telegram.bot-token-env", ""),
+                configManager.getString("notifications.telegram.chat-id-env", ""),
+                configManager.getInt("notifications.login-failures.cooldown-seconds", 300, 10, 86_400),
+                logger);
     }
 
     public void reloadConfig() {
         if (configManager != null) {
             configManager.loadConfigurations();
+            if (sessionService != null) {
+                sessionService.setTimeoutSeconds(configManager.getInt(
+                        "session.timeout-seconds", (int) sessionService.getTimeoutSeconds(), 1, 2_592_000));
+            }
+            if (authenticationTimeoutService != null) {
+                authenticationTimeoutService.configure(
+                        configManager.getBoolean("auth-timeout.enabled", authenticationTimeoutService.isEnabled()),
+                        configManager.getInt("auth-timeout.timeout-seconds",
+                                (int) authenticationTimeoutService.getTimeoutSeconds(), 5, 3_600));
+            }
         }
     }
 
@@ -213,5 +251,25 @@ public final class DependencyContainer implements AutoCloseable {
 
     public SessionService getSessionService() {
         return sessionService;
+    }
+
+    public AuthenticationTimeoutService getAuthenticationTimeoutService() {
+        return authenticationTimeoutService;
+    }
+
+    public SecurityService getSecurityService() {
+        return securityService;
+    }
+
+    public DatabaseManager getDatabaseManager() {
+        return databaseManager;
+    }
+
+    public String getRateLimitBackend() {
+        return rateLimitBackend;
+    }
+
+    public boolean isIpHashSecretConfigured() {
+        return ipHashSecretConfigured;
     }
 }

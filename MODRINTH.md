@@ -22,17 +22,20 @@ Paper-compatible servers use one plugin JAR across the supported range.
 - Optional reconnect sessions with IP verification
 - Configurable restrictions before authentication
 - English, Russian, Spanish, Italian, and French messages
-- Account unlock, unregister, password reset, and configuration reload commands
+- Authentication timeout with automatic kick
+- Status, doctor, audit, tab completion, and granular admin permissions
+- Expiring temporary password reset with mandatory permanent password change
+- Optional Discord webhook and Telegram bot failed-login alerts
 
 ## Installation
 
 ### Paper, Purpur, Spigot, or Leaf
 
-Place `authsecured-paper-1.1.1.jar` in `plugins/` and restart the server.
+Place `authsecured-paper-1.2.0.jar` in `plugins/` and restart the server.
 
 ### Fabric
 
-Place the exact `authsecured-fabric-1.1.1+mc<version>.jar` and the matching
+Place the exact `authsecured-fabric-1.2.0+mc<version>.jar` and the matching
 Fabric API in `mods/`, then restart the server.
 
 Minecraft 1.21.x uses Java 21. Minecraft 26.x uses Java 25 or newer. Do not load

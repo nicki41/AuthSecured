@@ -51,8 +51,8 @@ public final class ConfigManager {
             configValues = Collections.unmodifiableMap(loadedValues);
             localizationManager.init(getString("language", "en"));
         } catch (Exception e) {
-            logger.severe("Failed to load config.yml; keeping the last valid configuration: "
-                    + e.getMessage(), e);
+            logger.severe("Failed to load config.yml; keeping the last valid configuration. "
+                    + "File contents and exception details are hidden.");
         }
     }
 

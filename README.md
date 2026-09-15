@@ -1,4 +1,4 @@
-# AuthSecured 1.1.1
+# AuthSecured 1.2.0
 
 AuthSecured is one authentication codebase delivered as either a server plugin
 or a Fabric server mod. It supports Minecraft 1.21 through the current stable
@@ -6,7 +6,7 @@ release, 26.2.
 
 ## Platforms
 
-- Paper, Purpur, Spigot, and Leaf: install `authsecured-paper-1.1.1.jar` in
+- Paper, Purpur, Spigot, and Leaf: install `authsecured-paper-1.2.0.jar` in
   `plugins/`.
 - Fabric: install the JAR whose `+mc...` suffix exactly matches the Minecraft
   version in `mods/`, together with the matching Fabric API release.
@@ -27,6 +27,14 @@ The complete target list and Fabric API mapping are documented in
   interaction, block actions, combat, item pickup/drop, and hunger.
 - Always-on redaction of authentication command arguments from Fabric command
   diagnostics and debug exception logs.
+- A Paper log filter blocks raw login, registration, and password-change
+  commands before formatting, while event interception protects later dispatch.
+- Configurable authentication deadline with automatic kick.
+- Runtime status, diagnostics, granular admin permissions, and audit viewing.
+- Secure temporary password reset that forces the player to choose a permanent
+  password before authentication completes.
+- Optional privacy-safe failed-login alerts through Discord webhooks or a
+  Telegram bot, with per-player cooldown.
 - Shared domain and application services across Paper and Fabric, with only the
   server API adapters kept platform-specific.
 
@@ -41,8 +49,8 @@ select Java 21 for Minecraft 1.21.x and Java 25-compatible bytecode for 26.x.
 
 This runs every unit/integration test and builds:
 
-- `build/libs/authsecured-paper-1.1.1.jar`
-- `build/libs/authsecured-fabric-1.1.1+mc26.2.jar`
+- `build/libs/authsecured-paper-1.2.0.jar`
+- `build/libs/authsecured-fabric-1.2.0+mc26.2.jar`
 
 Build every supported Fabric target:
 
@@ -69,9 +77,11 @@ Build one Fabric target:
    exposing the server publicly.
 
 Passwords are accepted as command arguments because Minecraft has no native
-masked server-command input. AuthSecured never logs those values and redacts the
-arguments of `/login`, `/register`, `/changepassword` (including aliases), and
-`/authadmin resetpassword` before Fabric passes command text to diagnostics.
+masked server-command input. AuthSecured never logs those values. Fabric redacts
+authentication arguments before diagnostics. Paper blocks its built-in raw
+command record before console formatting and also redacts the later command
+event. `/authadmin resetpassword` does not
+accept a password argument at all.
 Players should still avoid reusing a password from any other service.
 
 Do not install both artifacts on the same server. They contain the same core but
@@ -86,13 +96,25 @@ target different server APIs.
 | `/changepassword` | `/changepassword <old> <new>` | everyone |
 | `/logout` | `/logout` | everyone |
 | `/authstatus` | `/authstatus` | everyone |
-| `/authadmin reload` | reload configuration | `authsecured.admin` / operator |
-| `/authadmin unlock` | `/authadmin unlock <player>` | `authsecured.admin` / operator |
-| `/authadmin unregister` | `/authadmin unregister <player>` | `authsecured.admin` / operator |
-| `/authadmin resetpassword` | `/authadmin resetpassword <player> <new>` | `authsecured.admin` / operator |
+| `/authadmin status` | show service and database state | `authsecured.admin.status` / level 2 |
+| `/authadmin doctor` | run configuration diagnostics | `authsecured.admin.doctor` / level 3 |
+| `/authadmin reload` | reload runtime configuration | `authsecured.admin.reload` / level 3 |
+| `/authadmin session gettimeout` | show the active session timeout | `authsecured.admin.session` / level 3 |
+| `/authadmin session settimeout <seconds>` | change timeout for new sessions immediately | `authsecured.admin.session` / level 3 |
+| `/authadmin audit [limit]` | show recent privacy-safe audit records | `authsecured.admin.audit` / level 3 |
+| `/authadmin audit player <name> [limit]` | filter audit records by account | `authsecured.admin.audit` / level 3 |
+| `/authadmin unlock <player>` | unlock an account | `authsecured.admin.unlock` / level 3 |
+| `/authadmin unregister <player>` | delete an account | `authsecured.admin.unregister` / level 4 |
+| `/authadmin resetpassword <player>` | generate an expiring temporary password | `authsecured.admin.resetpassword` / level 4 |
 
-Paper permission plugins may grant `authsecured.admin`; Fabric uses the vanilla
-administrator permission level.
+Paper permission plugins may grant one operation or the parent
+`authsecured.admin` permission. Fabric permission levels are configurable per
+operation in `admin.fabric-permission-levels`.
+
+Failed-login alerts are disabled by default. Enable
+`notifications.login-failures.enabled`, then set `AUTHSECURED_DISCORD_WEBHOOK`
+or both `AUTHSECURED_TELEGRAM_BOT_TOKEN` and `AUTHSECURED_TELEGRAM_CHAT_ID` in
+the server environment. Restart after changing notification endpoints.
 
 ## Configuration and deployment
 

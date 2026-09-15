@@ -20,12 +20,20 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
     private final AuthPlatform platform;
     private final LocalizationManager localizationManager;
     private final IpHashService ipHashService;
+    private final AuthenticationTimeoutService authenticationTimeoutService;
 
     public UnifiedCommandServiceImpl(AuthService authService, AuthPlatform platform, LocalizationManager localizationManager, IpHashService ipHashService) {
+        this(authService, platform, localizationManager, ipHashService, null);
+    }
+
+    public UnifiedCommandServiceImpl(AuthService authService, AuthPlatform platform,
+                                     LocalizationManager localizationManager, IpHashService ipHashService,
+                                     AuthenticationTimeoutService authenticationTimeoutService) {
         this.authService = authService;
         this.platform = platform;
         this.localizationManager = localizationManager;
         this.ipHashService = ipHashService;
+        this.authenticationTimeoutService = authenticationTimeoutService;
     }
 
     @Override
@@ -42,6 +50,7 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
                 .thenAccept(result -> platform.runTaskOnMainThread(() -> {
                     if (result == AuthResult.SUCCESS) {
                         platform.getRestrictionAdapter().setPlayerAuthenticated(playerUuid);
+                        clearAuthenticationTimeout(playerUuid);
                         platform.sendMessage(playerUuid, localizationManager.getMessage("messages.register-success"));
                     } else {
                         String msgKey = switch (result) {
@@ -70,12 +79,15 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
                 .thenAccept(result -> platform.runTaskOnMainThread(() -> {
                     if (result == AuthResult.SUCCESS) {
                         platform.getRestrictionAdapter().setPlayerAuthenticated(playerUuid);
+                        clearAuthenticationTimeout(playerUuid);
                         platform.sendMessage(playerUuid, localizationManager.getMessage("messages.login-success"));
                     } else {
                         String msgKey = switch (result) {
                             case ACCOUNT_NOT_FOUND, NOT_REGISTERED, INVALID_PASSWORD -> "messages.login-failed";
                             case ACCOUNT_LOCKED -> "messages.account-locked";
                             case RATE_LIMITED -> "messages.rate-limited";
+                            case PASSWORD_CHANGE_REQUIRED -> "messages.temporary-password-change-required";
+                            case TEMPORARY_PASSWORD_EXPIRED -> "messages.temporary-password-expired";
                             default -> "messages.error";
                         };
                         platform.sendMessage(playerUuid, localizationManager.getMessage(msgKey));
@@ -96,6 +108,8 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
         return authService.changePassword(playerUuid, oldPassword, newPassword, ipHash)
                 .thenAccept(result -> platform.runTaskOnMainThread(() -> {
                     if (result == AuthResult.SUCCESS) {
+                        platform.getRestrictionAdapter().setPlayerAuthenticated(playerUuid);
+                        clearAuthenticationTimeout(playerUuid);
                         platform.sendMessage(playerUuid, localizationManager.getMessage("messages.changepass-success"));
                     } else {
                         String msgKey = switch (result) {
@@ -121,6 +135,9 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
         return authService.getSessionService().revokeActiveSessionForPlayer(playerUuid)
                 .whenComplete((ignored, throwable) -> platform.runTaskOnMainThread(() -> {
                     platform.getRestrictionAdapter().setPlayerUnauthenticated(playerUuid, null);
+                    if (authenticationTimeoutService != null) {
+                        authenticationTimeoutService.start(playerUuid);
+                    }
                     String key = throwable == null ? "messages.logged-out" : "messages.error";
                     platform.sendMessage(playerUuid, localizationManager.getMessage(key));
                 }));
@@ -130,8 +147,16 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
     public void executeAuthStatus(UUID playerUuid) {
         AuthState state = platform.getRestrictionAdapter().getAuthState(playerUuid);
         String message = state == AuthState.AUTHENTICATED
-                ? "§aAuth Status: AUTHENTICATED"
-                : "§cAuth Status: AUTH_REQUIRED";
+                ? localizationManager.getMessage("messages.auth-status-authenticated",
+                "&aAuthentication status: authenticated.")
+                : localizationManager.getMessage("messages.auth-status-required",
+                "&cAuthentication status: login required.");
         platform.sendMessage(playerUuid, message);
+    }
+
+    private void clearAuthenticationTimeout(UUID playerUuid) {
+        if (authenticationTimeoutService != null) {
+            authenticationTimeoutService.clear(playerUuid);
+        }
     }
 }

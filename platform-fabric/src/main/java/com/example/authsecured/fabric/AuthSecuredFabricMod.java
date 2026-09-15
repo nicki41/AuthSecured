@@ -9,6 +9,7 @@ import com.example.authsecured.infrastructure.config.ConfigManager;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.network.chat.Component;
@@ -19,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -35,6 +37,7 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
     private FabricAuthPlatform platform;
     private DependencyContainer container;
     private volatile boolean initialized;
+    private int timeoutTickCounter;
 
     @Override
     public void onInitializeServer() {
@@ -45,6 +48,7 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
         registerLifecycleEvents();
         registerConnectionEvents();
         registerRestrictionEvents();
+        registerAuthenticationTimeout();
         LOGGER.info("AuthSecured Fabric adapter registered; core initialization will run during server startup.");
     }
 
@@ -83,13 +87,16 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
             restrictionAdapter.setPlayerUnauthenticated(uuid, null);
 
             if (!initialized) {
-                player.sendSystemMessage(Component.literal("§cAuthSecured failed to initialize. Contact a server administrator."));
+                player.sendSystemMessage(Component.literal(message("messages.initialization-failed",
+                        "§cAuthSecured is not initialized.")));
                 return;
             }
 
             ConfigManager config = container.getConfigManager();
+            container.getAuthenticationTimeoutService().start(uuid);
             if (platform.isOnlineMode() && config.getBoolean("auth.online-mode.bypass-password", true)) {
                 restrictionAdapter.setPlayerAuthenticated(uuid);
+                container.getAuthenticationTimeoutService().clear(uuid);
                 player.sendSystemMessage(Component.literal(config.getMessage("messages.auth-bypass",
                         "§aOnline-mode active: automatically authenticated!")));
                 return;
@@ -101,6 +108,7 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
                         if (valid) {
                             runForCurrentConnection(uuid, address, () -> {
                                 restrictionAdapter.setPlayerAuthenticated(uuid);
+                                container.getAuthenticationTimeoutService().clear(uuid);
                                 platform.sendMessage(uuid, config.getMessage("messages.session-restored",
                                         "§aSession restored automatically!"));
                             });
@@ -121,8 +129,37 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             UUID uuid = handler.getPlayer().getUUID();
+            if (container != null) {
+                container.getAuthenticationTimeoutService().clear(uuid);
+            }
             restrictionAdapter.removePlayer(uuid);
             playerAddresses.remove(uuid);
+        });
+    }
+
+    private void registerAuthenticationTimeout() {
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            if (!initialized || ++timeoutTickCounter < 20) return;
+            timeoutTickCounter = 0;
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                if (!restrictionAdapter.isAuthenticated(player.getUUID())) {
+                    container.getAuthenticationTimeoutService().ensureStarted(player.getUUID());
+                }
+            }
+            for (UUID uuid : container.getAuthenticationTimeoutService().drainExpired(Instant.now())) {
+                if (!restrictionAdapter.isAuthenticated(uuid) && platform.isPlayerOnline(uuid)) {
+                    container.getSecurityService().logSecurityEvent(
+                            null,
+                            com.example.authsecured.domain.security.SecurityEventType.AUTH_TIMEOUT,
+                            null,
+                            "authentication deadline expired"
+                    );
+                    platform.disconnectPlayer(uuid, container.getConfigManager().getMessage(
+                            "messages.authentication-timeout-kick",
+                            "§cAuthentication time expired. Reconnect and try again."
+                    ));
+                }
+            }
         });
     }
 
@@ -207,7 +244,10 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
     }
 
     public String message(String key, String fallback) {
-        return initialized ? container.getConfigManager().getMessage(key, fallback) : fallback;
+        DependencyContainer currentContainer = container;
+        return currentContainer != null
+                ? currentContainer.getConfigManager().getMessage(key, fallback)
+                : fallback;
     }
 
     private void runForCurrentConnection(UUID uuid, String expectedAddress, Runnable task) {

@@ -66,4 +66,19 @@ class SessionServiceTest {
         assertFalse(service.isValidActiveSession(UUID.randomUUID(), null).join());
         Mockito.verifyNoInteractions(repository);
     }
+
+    @Test
+    void runtimeTimeoutAffectsNewSessionsImmediately() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        Mockito.when(repository.save(Mockito.any())).thenReturn(CompletableFuture.completedFuture(null));
+        SessionService service = new SessionService(repository, true, true, 30, false);
+
+        service.setTimeoutSeconds(120);
+        Session session = service.createSession(1L, UUID.randomUUID(), "server1").join();
+
+        assertEquals(120, service.getTimeoutSeconds());
+        assertEquals(120, java.time.Duration.between(session.getCreatedAt(), session.getExpiresAt()).getSeconds());
+        assertThrows(IllegalArgumentException.class, () -> service.setTimeoutSeconds(0));
+        assertEquals(120, service.getTimeoutSeconds());
+    }
 }

@@ -59,4 +59,18 @@ public class PaperAuthPlatform implements AuthPlatform {
     public boolean isOnlineMode() {
         return Bukkit.getOnlineMode();
     }
+
+    @Override
+    public boolean isPlayerOnline(UUID playerUuid) {
+        Player player = Bukkit.getPlayer(playerUuid);
+        return player != null && player.isOnline();
+    }
+
+    @Override
+    public void disconnectPlayer(UUID playerUuid, String reason) {
+        Player player = Bukkit.getPlayer(playerUuid);
+        if (player != null && player.isOnline()) {
+            player.kickPlayer(reason);
+        }
+    }
 }

@@ -10,12 +10,14 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.Statement;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 public final class DatabaseManager {
@@ -79,7 +81,7 @@ public final class DatabaseManager {
             if ("postgresql".equals(dbType) || "postgres".equals(dbType)) {
                 Flyway flyway = Flyway.configure(DatabaseManager.class.getClassLoader())
                         .dataSource(dataSource)
-                        .locations("classpath:db/migration")
+                        .locations("classpath:db/migration/postgresql")
                         .load();
                 flyway.migrate();
                 logger.info("PostgreSQL database migrations applied successfully via Flyway.");
@@ -95,13 +97,35 @@ public final class DatabaseManager {
                                 stmt.execute(query.trim());
                             }
                         }
+                        applyAccountSecurityColumnsSqlite(conn);
                         logger.info("SQLite database schema initialized successfully.");
                     }
                 }
             }
         } catch (Exception e) {
-            logger.severe("Database migration failure: " + e.getMessage());
+            logger.severe("Database migration failed. Connection details are hidden.");
             throw new RuntimeException("Failed to run database migrations", e);
+        }
+    }
+
+    /** Adds columns introduced after the first public schema without breaking existing SQLite installs. */
+    private void applyAccountSecurityColumnsSqlite(Connection connection) throws Exception {
+        if (!hasColumn(connection, "accounts", "password_change_required")) {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("ALTER TABLE accounts ADD COLUMN password_change_required INTEGER NOT NULL DEFAULT 0");
+            }
+        }
+        if (!hasColumn(connection, "accounts", "temporary_password_expires_at")) {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("ALTER TABLE accounts ADD COLUMN temporary_password_expires_at TEXT NULL");
+            }
+        }
+    }
+
+    private static boolean hasColumn(Connection connection, String table, String column) throws Exception {
+        DatabaseMetaData metadata = connection.getMetaData();
+        try (var columns = metadata.getColumns(null, null, table, column)) {
+            return columns.next();
         }
     }
 
@@ -115,6 +139,32 @@ public final class DatabaseManager {
 
     public boolean isPostgres() {
         return "postgresql".equals(dbType) || "postgres".equals(dbType);
+    }
+
+    public CompletableFuture<Boolean> ping() {
+        return CompletableFuture.supplyAsync(() -> {
+            try (Connection connection = dataSource.getConnection();
+                 Statement statement = connection.createStatement()) {
+                statement.execute("SELECT 1");
+                return true;
+            } catch (Exception exception) {
+                return false;
+            }
+        }, dbExecutor);
+    }
+
+    public String getDatabaseType() {
+        return isPostgres() ? "postgresql" : "sqlite";
+    }
+
+    public int getActiveConnections() {
+        return dataSource.getHikariPoolMXBean() == null ? -1
+                : dataSource.getHikariPoolMXBean().getActiveConnections();
+    }
+
+    public int getIdleConnections() {
+        return dataSource.getHikariPoolMXBean() == null ? -1
+                : dataSource.getHikariPoolMXBean().getIdleConnections();
     }
 
     public void close() {

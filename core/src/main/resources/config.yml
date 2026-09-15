@@ -1,8 +1,8 @@
 # AuthSecured configuration
 #
-# Changes to language and restrictions are applied by /authadmin reload.
-# Database, Redis, password hashing, rate-limit and session changes require a
-# full server restart because their services are created during startup.
+# Language, restrictions, session timeout, and authentication timeout changes
+# are applied by /authadmin reload. Database, Redis, password hashing, and
+# notification endpoint changes require a full server restart.
 # Durations are in seconds and memory values are in KiB unless stated otherwise.
 
 # Message language. Available values: en, ru, es, it, fr.
@@ -100,6 +100,30 @@ auth:
     # This does not bypass passwords on an offline-mode backend.
     bypass-password: true
 
+auth-timeout:
+  # Kick players who do not register or log in before the deadline.
+  enabled: true
+  # Allowed range: 5..3600. The countdown starts on join and after /logout.
+  timeout-seconds: 60
+
+admin:
+  temporary-password:
+    # /authadmin resetpassword <player> generates a random temporary password.
+    # It is shown once to the administrator and never accepted as a command argument.
+    length: 18                 # Allowed range: 12..64
+    expires-seconds: 900       # Allowed range: 60..86400
+
+  fabric-permission-levels:
+    # Fabric uses vanilla permission levels 0..4 for each operation.
+    status: 2
+    doctor: 3
+    reload: 3
+    session: 3
+    audit: 3
+    unlock: 3
+    unregister: 4
+    resetpassword: 4
+
 restrictions:
   # Controls applied only until the player authenticates.
   freeze-player: true          # Block position changes
@@ -132,6 +156,24 @@ logging:
     # Store security events and authentication attempts in the database.
     enabled: true
 
-# Password arguments of /login, /register, /changepassword, their aliases, and
-# /authadmin resetpassword are always redacted from Fabric command diagnostics.
-# This protection is intentionally not configurable.
+notifications:
+  login-failures:
+    # Send a privacy-safe alert after a failed login. Passwords and raw IPs are
+    # never included. Repeated alerts for one player are limited by cooldown.
+    enabled: false
+    cooldown-seconds: 300      # Allowed range: 10..86400
+
+  discord:
+    # Example environment variable: AUTHSECURED_DISCORD_WEBHOOK
+    webhook-url-env: "${ENV:AUTHSECURED_DISCORD_WEBHOOK}"
+
+  telegram:
+    # Create a bot with BotFather, then provide its token and target chat ID as
+    # environment variables. Never paste the bot token directly into this file.
+    bot-token-env: "${ENV:AUTHSECURED_TELEGRAM_BOT_TOKEN}"
+    chat-id-env: "${ENV:AUTHSECURED_TELEGRAM_CHAT_ID}"
+
+# Password arguments of /login, /register, /changepassword and their aliases
+# are always protected from command diagnostics. On Paper, the built-in raw
+# command log is blocked before formatting and the later command event is
+# redacted before dispatch. This protection is not configurable.

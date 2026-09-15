@@ -17,11 +17,22 @@ public class Account {
     private Instant updatedAt;
     private Instant lastLoginAt;
     private Instant passwordChangedAt;
+    private boolean passwordChangeRequired;
+    private Instant temporaryPasswordExpiresAt;
 
     public Account(Long id, UUID uuid, String username, String usernameNormalized,
                    String passwordHash, AccountStatus status, int failedLoginAttempts,
                    Instant lockedUntil, Instant createdAt, Instant updatedAt,
                    Instant lastLoginAt, Instant passwordChangedAt) {
+        this(id, uuid, username, usernameNormalized, passwordHash, status, failedLoginAttempts,
+                lockedUntil, createdAt, updatedAt, lastLoginAt, passwordChangedAt, false, null);
+    }
+
+    public Account(Long id, UUID uuid, String username, String usernameNormalized,
+                   String passwordHash, AccountStatus status, int failedLoginAttempts,
+                   Instant lockedUntil, Instant createdAt, Instant updatedAt,
+                   Instant lastLoginAt, Instant passwordChangedAt,
+                   boolean passwordChangeRequired, Instant temporaryPasswordExpiresAt) {
         this.id = id;
         this.uuid = Objects.requireNonNull(uuid, "UUID cannot be null");
         this.username = Objects.requireNonNull(username, "Username cannot be null");
@@ -34,6 +45,8 @@ public class Account {
         this.updatedAt = updatedAt != null ? updatedAt : Instant.now();
         this.lastLoginAt = lastLoginAt;
         this.passwordChangedAt = passwordChangedAt != null ? passwordChangedAt : Instant.now();
+        this.passwordChangeRequired = passwordChangeRequired;
+        this.temporaryPasswordExpiresAt = temporaryPasswordExpiresAt;
     }
 
     public static Account createNew(UUID uuid, String username, String usernameNormalized, String passwordHash) {
@@ -69,6 +82,25 @@ public class Account {
         this.passwordHash = Objects.requireNonNull(newPasswordHash, "New password hash cannot be null");
         this.passwordChangedAt = currentTime;
         this.updatedAt = currentTime;
+        this.passwordChangeRequired = false;
+        this.temporaryPasswordExpiresAt = null;
+    }
+
+    public void setTemporaryPassword(String passwordHash, Instant expiresAt) {
+        this.passwordHash = Objects.requireNonNull(passwordHash, "Password hash cannot be null");
+        this.passwordChangeRequired = true;
+        this.temporaryPasswordExpiresAt = Objects.requireNonNull(expiresAt, "Expiry cannot be null");
+        this.passwordChangedAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
+    public boolean isPasswordChangeRequired() {
+        return passwordChangeRequired;
+    }
+
+    public boolean isTemporaryPasswordExpired(Instant currentTime) {
+        return passwordChangeRequired && temporaryPasswordExpiresAt != null
+                && !currentTime.isBefore(temporaryPasswordExpiresAt);
     }
 
     public void unlock() {
@@ -96,6 +128,8 @@ public class Account {
     public Instant getUpdatedAt() { return updatedAt; }
     public Instant getLastLoginAt() { return lastLoginAt; }
     public Instant getPasswordChangedAt() { return passwordChangedAt; }
+    public boolean isPasswordChangeRequiredFlag() { return passwordChangeRequired; }
+    public Instant getTemporaryPasswordExpiresAt() { return temporaryPasswordExpiresAt; }
 
     @Override
     public boolean equals(Object o) {

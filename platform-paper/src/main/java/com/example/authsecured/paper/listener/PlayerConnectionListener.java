@@ -1,6 +1,7 @@
 package com.example.authsecured.paper.listener;
 
 import com.example.authsecured.application.AuthService;
+import com.example.authsecured.application.AuthenticationTimeoutService;
 import com.example.authsecured.infrastructure.config.ConfigManager;
 import com.example.authsecured.infrastructure.security.IpHashService;
 import com.example.authsecured.paper.player.PlayerRestrictionManager;
@@ -22,14 +23,17 @@ public class PlayerConnectionListener implements Listener {
     private final PlayerRestrictionManager restrictionManager;
     private final ConfigManager configManager;
     private final IpHashService ipHashService;
+    private final AuthenticationTimeoutService authenticationTimeoutService;
     private final Plugin plugin;
 
     public PlayerConnectionListener(AuthService authService, PlayerRestrictionManager restrictionManager,
-                                    ConfigManager configManager, IpHashService ipHashService, Plugin plugin) {
+                                    ConfigManager configManager, IpHashService ipHashService,
+                                    AuthenticationTimeoutService authenticationTimeoutService, Plugin plugin) {
         this.authService = authService;
         this.restrictionManager = restrictionManager;
         this.configManager = configManager;
         this.ipHashService = ipHashService;
+        this.authenticationTimeoutService = authenticationTimeoutService;
         this.plugin = plugin;
     }
 
@@ -39,10 +43,12 @@ public class PlayerConnectionListener implements Listener {
         UUID uuid = player.getUniqueId();
 
         restrictionManager.setPlayerUnauthenticated(uuid, player.getLocation());
+        authenticationTimeoutService.start(uuid);
 
         boolean onlineModeBypass = configManager.getBoolean("auth.online-mode.bypass-password", true);
         if (onlineModeBypass && Bukkit.getOnlineMode()) {
             restrictionManager.setPlayerAuthenticated(uuid);
+            authenticationTimeoutService.clear(uuid);
             player.sendMessage(configManager.getMessage("messages.auth-bypass", "&aOnline-mode active: Automatically authenticated!"));
             return;
         }
@@ -56,6 +62,7 @@ public class PlayerConnectionListener implements Listener {
                 if (!player.isOnline()) return;
                 if (hasActiveSession) {
                     restrictionManager.setPlayerAuthenticated(uuid);
+                    authenticationTimeoutService.clear(uuid);
                     player.sendMessage(configManager.getMessage("messages.session-restored", "&aSession restored automatically!"));
                 } else {
                     authService.isRegistered(uuid).thenAccept(registered -> {
@@ -68,13 +75,13 @@ public class PlayerConnectionListener implements Listener {
                             }
                         });
                     }).exceptionally(ex -> {
-                        plugin.getLogger().severe("Error checking registration status for " + player.getName() + ": " + ex.getMessage());
+                        plugin.getLogger().severe("Registration status check failed for " + player.getName() + ".");
                         return null;
                     });
                 }
             });
         }).exceptionally(ex -> {
-            plugin.getLogger().severe("Error validating session for " + player.getName() + ": " + ex.getMessage());
+            plugin.getLogger().severe("Session validation failed for " + player.getName() + ".");
             return null;
         });
     }
@@ -82,6 +89,7 @@ public class PlayerConnectionListener implements Listener {
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
+        authenticationTimeoutService.clear(uuid);
         restrictionManager.removePlayer(uuid);
     }
 }

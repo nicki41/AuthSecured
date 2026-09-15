@@ -9,13 +9,14 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class SessionService {
 
     private final SessionRepository sessionRepository;
     private final boolean enabled;
     private final boolean persistent;
-    private final long timeoutSeconds;
+    private final AtomicLong timeoutSeconds;
     private final boolean verifyIp;
     private final Map<UUID, Session> volatileSessions = new ConcurrentHashMap<>();
 
@@ -27,7 +28,7 @@ public class SessionService {
         this.sessionRepository = sessionRepository;
         this.enabled = enabled;
         this.persistent = persistent;
-        this.timeoutSeconds = timeoutSeconds;
+        this.timeoutSeconds = new AtomicLong(validateTimeout(timeoutSeconds));
         this.verifyIp = verifyIp;
     }
 
@@ -37,7 +38,7 @@ public class SessionService {
 
     public CompletableFuture<Session> createSession(Long accountId, UUID playerUuid, byte[] ipHash,
                                                     String serverId) {
-        Session session = Session.create(accountId, playerUuid, ipHash, serverId, timeoutSeconds);
+        Session session = Session.create(accountId, playerUuid, ipHash, serverId, timeoutSeconds.get());
         if (!enabled) {
             return CompletableFuture.completedFuture(session);
         }
@@ -117,6 +118,14 @@ public class SessionService {
 
     public boolean isEnabled() { return enabled; }
     public boolean isPersistent() { return persistent; }
-    public long getTimeoutSeconds() { return timeoutSeconds; }
+    public long getTimeoutSeconds() { return timeoutSeconds.get(); }
+    public void setTimeoutSeconds(long seconds) { timeoutSeconds.set(validateTimeout(seconds)); }
     public boolean isVerifyIp() { return verifyIp; }
+
+    private static long validateTimeout(long seconds) {
+        if (seconds < 1 || seconds > 2_592_000L) {
+            throw new IllegalArgumentException("Session timeout must be between 1 and 2592000 seconds");
+        }
+        return seconds;
+    }
 }

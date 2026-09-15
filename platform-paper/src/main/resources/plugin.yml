@@ -26,10 +26,42 @@ commands:
     usage: /authstatus
   authadmin:
     description: Admin authentication operations.
-    usage: /authadmin <reload|unregister|unlock|resetpassword>
-    permission: authsecured.admin
+    usage: /authadmin <status|doctor|reload|session|audit|unlock|unregister|resetpassword>
 
 permissions:
   authsecured.admin:
-    description: Allows access to administrative auth commands.
+    description: Grants every AuthSecured administrative operation.
+    default: op
+    children:
+      authsecured.admin.status: true
+      authsecured.admin.doctor: true
+      authsecured.admin.reload: true
+      authsecured.admin.session: true
+      authsecured.admin.audit: true
+      authsecured.admin.unlock: true
+      authsecured.admin.unregister: true
+      authsecured.admin.resetpassword: true
+  authsecured.admin.status:
+    description: View runtime status.
+    default: op
+  authsecured.admin.doctor:
+    description: Run configuration and dependency diagnostics.
+    default: op
+  authsecured.admin.reload:
+    description: Reload runtime configuration.
+    default: op
+  authsecured.admin.session:
+    description: Inspect and change the runtime session timeout.
+    default: op
+  authsecured.admin.audit:
+    description: View privacy-safe authentication audit entries.
+    default: op
+  authsecured.admin.unlock:
+    description: Unlock accounts.
+    default: op
+  authsecured.admin.unregister:
+    description: Delete accounts.
+    default: op
+  authsecured.admin.resetpassword:
+    description: Generate temporary account passwords.
     default: op

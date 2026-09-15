@@ -1,6 +1,7 @@
 package com.example.authsecured.paper.command;
 
 import com.example.authsecured.application.AuthService;
+import com.example.authsecured.application.AuthenticationTimeoutService;
 import com.example.authsecured.infrastructure.config.ConfigManager;
 import com.example.authsecured.infrastructure.security.IpHashService;
 import com.example.authsecured.paper.player.PlayerRestrictionManager;
@@ -20,21 +21,25 @@ public class RegisterCommand implements CommandExecutor {
     private final PlayerRestrictionManager restrictionManager;
     private final ConfigManager configManager;
     private final IpHashService ipHashService;
+    private final AuthenticationTimeoutService authenticationTimeoutService;
     private final Plugin plugin;
 
     public RegisterCommand(AuthService authService, PlayerRestrictionManager restrictionManager,
-                           ConfigManager configManager, IpHashService ipHashService, Plugin plugin) {
+                           ConfigManager configManager, IpHashService ipHashService,
+                           AuthenticationTimeoutService authenticationTimeoutService, Plugin plugin) {
         this.authService = authService;
         this.restrictionManager = restrictionManager;
         this.configManager = configManager;
         this.ipHashService = ipHashService;
+        this.authenticationTimeoutService = authenticationTimeoutService;
         this.plugin = plugin;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("Only players can use this command.");
+            sender.sendMessage(configManager.getMessage(
+                    "messages.only-players", "&cOnly players can use this command."));
             return true;
         }
 
@@ -67,6 +72,7 @@ public class RegisterCommand implements CommandExecutor {
                 switch (result) {
                     case SUCCESS -> {
                         restrictionManager.setPlayerAuthenticated(uuid);
+                        authenticationTimeoutService.clear(uuid);
                         player.sendMessage(configManager.getMessage("messages.register-success", "&aSuccessfully registered and logged in!"));
                     }
                     case ALREADY_REGISTERED ->
@@ -86,7 +92,7 @@ public class RegisterCommand implements CommandExecutor {
                     player.sendMessage(configManager.getMessage("messages.error", "&cAn internal error occurred."));
                 }
             });
-            plugin.getLogger().severe("Error processing registration for " + player.getName() + ": " + ex.getMessage());
+            plugin.getLogger().severe("Registration processing failed for " + player.getName() + ".");
             return null;
         });
 

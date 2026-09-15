@@ -32,7 +32,7 @@ public class RedisRateLimitStore implements RateLimitStore {
                 }
                 return (int) count;
             } catch (Exception e) {
-                logger.warning("Redis operation failed, falling back to memory: " + e.getMessage());
+                logger.warning("Redis operation failed; using the in-memory fallback. Connection details are hidden.");
                 return fallbackStore.incrementAndGet(key, windowSeconds).join();
             }
         });
@@ -47,7 +47,7 @@ public class RedisRateLimitStore implements RateLimitStore {
             try (Jedis jedis = jedisPool.getResource()) {
                 return jedis.exists(lockKey);
             } catch (Exception e) {
-                logger.warning("Redis operation failed, falling back to memory: " + e.getMessage());
+                logger.warning("Redis operation failed; using the in-memory fallback. Connection details are hidden.");
                 return fallbackStore.isLocked(lockKey).join();
             }
         });
@@ -62,7 +62,7 @@ public class RedisRateLimitStore implements RateLimitStore {
             try (Jedis jedis = jedisPool.getResource()) {
                 jedis.setex(lockKey, lockSeconds, "LOCKED");
             } catch (Exception e) {
-                logger.warning("Redis operation failed, falling back to memory: " + e.getMessage());
+                logger.warning("Redis operation failed; using the in-memory fallback. Connection details are hidden.");
                 fallbackStore.setLock(lockKey, lockSeconds).join();
             }
         });
@@ -77,7 +77,7 @@ public class RedisRateLimitStore implements RateLimitStore {
             try (Jedis jedis = jedisPool.getResource()) {
                 jedis.del(key);
             } catch (Exception e) {
-                logger.warning("Redis operation failed, falling back to memory: " + e.getMessage());
+                logger.warning("Redis operation failed; using the in-memory fallback. Connection details are hidden.");
                 fallbackStore.reset(key).join();
             }
         });

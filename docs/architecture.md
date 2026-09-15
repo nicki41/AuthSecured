@@ -19,6 +19,7 @@ Paper / Bukkit adapter              Fabric server adapter
 5. **Platform Layer**: Paper listeners/Bukkit commands and Fabric
    events/Brigadier commands translate server APIs into the same core ports.
 
-`platform-common` owns dependency construction so both runtimes receive the same
-password policy, rate limits, session semantics, localization, and persistence.
+`platform-common` owns dependency construction and shared admin operations so
+both runtimes receive the same password policy, rate limits, session semantics,
+authentication deadlines, audit views, notifications, localization, and persistence.
 Platform modules contain no duplicated authentication business rules.

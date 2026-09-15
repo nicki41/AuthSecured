@@ -106,11 +106,12 @@ class UnifiedCommandServiceTest {
     @DisplayName("Execute authstatus queries restriction adapter")
     void testExecuteAuthStatus() {
         UUID playerUuid = UUID.randomUUID();
+        localizationManager.init("ru");
         when(restrictionAdapter.getAuthState(playerUuid)).thenReturn(AuthState.AUTHENTICATED);
 
         commandExecutor.executeAuthStatus(playerUuid);
 
         verify(restrictionAdapter).getAuthState(playerUuid);
-        verify(platform).sendMessage(eq(playerUuid), anyString());
+        verify(platform).sendMessage(eq(playerUuid), argThat(message -> message.contains("вы авторизованы")));
     }
 }

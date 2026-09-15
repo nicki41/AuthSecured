@@ -40,7 +40,7 @@ for minecraft_version in "${versions[@]}"; do
         echo "Fabric build failed after 3 attempts: $minecraft_version" >&2
         exit 1
     fi
-    cp "$PROJECT_DIR/platform-fabric/build/libs/authsecured-fabric-1.1.1+mc$minecraft_version.jar" \
+    cp "$PROJECT_DIR/platform-fabric/build/libs/authsecured-fabric-1.2.0+mc$minecraft_version.jar" \
         "$OUTPUT_DIR/"
 done
 

@@ -1,6 +1,7 @@
 package com.example.authsecured.paper.command;
 
 import com.example.authsecured.application.AuthService;
+import com.example.authsecured.application.AuthenticationTimeoutService;
 import com.example.authsecured.infrastructure.config.ConfigManager;
 import com.example.authsecured.infrastructure.security.IpHashService;
 import com.example.authsecured.paper.player.PlayerRestrictionManager;
@@ -20,21 +21,25 @@ public class LoginCommand implements CommandExecutor {
     private final PlayerRestrictionManager restrictionManager;
     private final ConfigManager configManager;
     private final IpHashService ipHashService;
+    private final AuthenticationTimeoutService authenticationTimeoutService;
     private final Plugin plugin;
 
     public LoginCommand(AuthService authService, PlayerRestrictionManager restrictionManager,
-                        ConfigManager configManager, IpHashService ipHashService, Plugin plugin) {
+                        ConfigManager configManager, IpHashService ipHashService,
+                        AuthenticationTimeoutService authenticationTimeoutService, Plugin plugin) {
         this.authService = authService;
         this.restrictionManager = restrictionManager;
         this.configManager = configManager;
         this.ipHashService = ipHashService;
+        this.authenticationTimeoutService = authenticationTimeoutService;
         this.plugin = plugin;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("Only players can use this command.");
+            sender.sendMessage(configManager.getMessage(
+                    "messages.only-players", "&cOnly players can use this command."));
             return true;
         }
 
@@ -62,6 +67,7 @@ public class LoginCommand implements CommandExecutor {
                 switch (result) {
                     case SUCCESS -> {
                         restrictionManager.setPlayerAuthenticated(uuid);
+                        authenticationTimeoutService.clear(uuid);
                         player.sendMessage(configManager.getMessage("messages.login-success", "&aSuccessfully logged in!"));
                     }
                     case INVALID_PASSWORD, ACCOUNT_NOT_FOUND ->
@@ -70,6 +76,10 @@ public class LoginCommand implements CommandExecutor {
                             player.sendMessage(configManager.getMessage("messages.account-locked", "&cAccount is temporarily locked."));
                     case RATE_LIMITED ->
                             player.sendMessage(configManager.getMessage("messages.rate-limited", "&cToo many attempts. Please wait."));
+                    case PASSWORD_CHANGE_REQUIRED ->
+                            player.sendMessage(configManager.getMessage("messages.temporary-password-change-required", "&eTemporary password accepted. Use /changepassword <temporary> <newPassword>."));
+                    case TEMPORARY_PASSWORD_EXPIRED ->
+                            player.sendMessage(configManager.getMessage("messages.temporary-password-expired", "&cThe temporary password has expired. Contact an administrator."));
                     default ->
                             player.sendMessage(configManager.getMessage("messages.error", "&cAn internal error occurred."));
                 }
@@ -81,7 +91,7 @@ public class LoginCommand implements CommandExecutor {
                     player.sendMessage(configManager.getMessage("messages.error", "&cAn internal error occurred."));
                 }
             });
-            plugin.getLogger().severe("Error processing login for " + player.getName() + ": " + ex.getMessage());
+            plugin.getLogger().severe("Login processing failed for " + player.getName() + ".");
             return null;
         });
 

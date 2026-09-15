@@ -3,10 +3,12 @@ package com.example.authsecured.application;
 import com.example.authsecured.domain.auth.LoginAttempt;
 import com.example.authsecured.domain.security.SecurityEvent;
 import com.example.authsecured.domain.security.SecurityEventType;
+import com.example.authsecured.domain.security.AuditEntry;
 import com.example.authsecured.ports.AuditRepository;
 
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
+import java.util.List;
 
 public class SecurityService {
 
@@ -32,5 +34,17 @@ public class SecurityService {
 
     public CompletableFuture<Void> purgeAuditLogs(int loginAttemptsDays, int securityEventsDays) {
         return auditRepository.purgeOldRecords(loginAttemptsDays, securityEventsDays);
+    }
+
+    public CompletableFuture<List<AuditEntry>> findRecentAuditEntries(int limit, String usernameNormalized) {
+        if (!auditEnabled) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        return auditRepository.findRecent(safeLimit, usernameNormalized);
+    }
+
+    public boolean isAuditEnabled() {
+        return auditEnabled;
     }
 }

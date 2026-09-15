@@ -27,7 +27,7 @@ public class PostgresAccountRepository implements AccountRepository {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "SELECT id, uuid, username, username_normalized, password_hash, status, " +
                     "failed_login_attempts, locked_until, created_at, updated_at, last_login_at, " +
-                    "password_changed_at FROM accounts WHERE uuid = ?";
+                    "password_changed_at, password_change_required, temporary_password_expires_at FROM accounts WHERE uuid = ?";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setObject(1, uuid);
@@ -48,7 +48,7 @@ public class PostgresAccountRepository implements AccountRepository {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "SELECT id, uuid, username, username_normalized, password_hash, status, " +
                     "failed_login_attempts, locked_until, created_at, updated_at, last_login_at, " +
-                    "password_changed_at FROM accounts WHERE username_normalized = ?";
+                    "password_changed_at, password_change_required, temporary_password_expires_at FROM accounts WHERE username_normalized = ?";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, usernameNormalized);
@@ -68,8 +68,9 @@ public class PostgresAccountRepository implements AccountRepository {
     public CompletableFuture<Account> save(Account account) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "INSERT INTO accounts (uuid, username, username_normalized, password_hash, status, " +
-                    "failed_login_attempts, locked_until, created_at, updated_at, last_login_at, password_changed_at) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id";
+                    "failed_login_attempts, locked_until, created_at, updated_at, last_login_at, password_changed_at, " +
+                    "password_change_required, temporary_password_expires_at) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setObject(1, account.getUuid());
@@ -83,6 +84,9 @@ public class PostgresAccountRepository implements AccountRepository {
                 stmt.setTimestamp(9, Timestamp.from(account.getUpdatedAt()));
                 stmt.setTimestamp(10, account.getLastLoginAt() != null ? Timestamp.from(account.getLastLoginAt()) : null);
                 stmt.setTimestamp(11, Timestamp.from(account.getPasswordChangedAt()));
+                stmt.setBoolean(12, account.isPasswordChangeRequiredFlag());
+                stmt.setTimestamp(13, account.getTemporaryPasswordExpiresAt() != null
+                        ? Timestamp.from(account.getTemporaryPasswordExpiresAt()) : null);
 
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
@@ -92,7 +96,8 @@ public class PostgresAccountRepository implements AccountRepository {
                                 account.getStatus(), account.getFailedLoginAttempts(),
                                 account.getLockedUntil(), account.getCreatedAt(),
                                 account.getUpdatedAt(), account.getLastLoginAt(),
-                                account.getPasswordChangedAt());
+                                account.getPasswordChangedAt(), account.isPasswordChangeRequiredFlag(),
+                                account.getTemporaryPasswordExpiresAt());
                     }
                 }
             } catch (SQLException e) {
@@ -107,7 +112,7 @@ public class PostgresAccountRepository implements AccountRepository {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "UPDATE accounts SET username = ?, password_hash = ?, status = ?, " +
                     "failed_login_attempts = ?, locked_until = ?, updated_at = ?, last_login_at = ?, " +
-                    "password_changed_at = ? WHERE uuid = ?";
+                    "password_changed_at = ?, password_change_required = ?, temporary_password_expires_at = ? WHERE uuid = ?";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, account.getUsername());
@@ -118,7 +123,10 @@ public class PostgresAccountRepository implements AccountRepository {
                 stmt.setTimestamp(6, Timestamp.from(account.getUpdatedAt()));
                 stmt.setTimestamp(7, account.getLastLoginAt() != null ? Timestamp.from(account.getLastLoginAt()) : null);
                 stmt.setTimestamp(8, Timestamp.from(account.getPasswordChangedAt()));
-                stmt.setObject(9, account.getUuid());
+                stmt.setBoolean(9, account.isPasswordChangeRequiredFlag());
+                stmt.setTimestamp(10, account.getTemporaryPasswordExpiresAt() != null
+                        ? Timestamp.from(account.getTemporaryPasswordExpiresAt()) : null);
+                stmt.setObject(11, account.getUuid());
 
                 return stmt.executeUpdate() > 0;
             } catch (SQLException e) {
@@ -178,8 +186,13 @@ public class PostgresAccountRepository implements AccountRepository {
         Timestamp lastLoginTs = rs.getTimestamp("last_login_at");
         Instant lastLoginAt = lastLoginTs != null ? lastLoginTs.toInstant() : null;
         Instant passwordChangedAt = rs.getTimestamp("password_changed_at").toInstant();
+        boolean passwordChangeRequired = rs.getBoolean("password_change_required");
+        Timestamp temporaryPasswordExpiresAtTs = rs.getTimestamp("temporary_password_expires_at");
+        Instant temporaryPasswordExpiresAt = temporaryPasswordExpiresAtTs != null
+                ? temporaryPasswordExpiresAtTs.toInstant() : null;
 
         return new Account(id, uuid, username, usernameNormalized, passwordHash, status,
-                failedAttempts, lockedUntil, createdAt, updatedAt, lastLoginAt, passwordChangedAt);
+                failedAttempts, lockedUntil, createdAt, updatedAt, lastLoginAt, passwordChangedAt,
+                passwordChangeRequired, temporaryPasswordExpiresAt);
     }
 }

@@ -73,8 +73,19 @@ public final class FabricAuthPlatform implements AuthPlatform {
         return currentServer != null && currentServer.usesAuthentication();
     }
 
+    @Override
     public boolean isPlayerOnline(UUID playerUuid) {
         MinecraftServer currentServer = server;
         return currentServer != null && currentServer.getPlayerList().getPlayer(playerUuid) != null;
+    }
+
+    @Override
+    public void disconnectPlayer(UUID playerUuid, String reason) {
+        MinecraftServer currentServer = server;
+        if (currentServer == null) return;
+        ServerPlayer player = currentServer.getPlayerList().getPlayer(playerUuid);
+        if (player != null) {
+            player.connection.disconnect(Component.literal(reason));
+        }
     }
 }

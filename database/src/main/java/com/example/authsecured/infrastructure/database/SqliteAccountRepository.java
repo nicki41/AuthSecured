@@ -27,7 +27,7 @@ public class SqliteAccountRepository implements AccountRepository {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "SELECT id, uuid, username, username_normalized, password_hash, status, " +
                     "failed_login_attempts, locked_until, created_at, updated_at, last_login_at, " +
-                    "password_changed_at FROM accounts WHERE uuid = ?";
+                    "password_changed_at, password_change_required, temporary_password_expires_at FROM accounts WHERE uuid = ?";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, uuid.toString());
@@ -48,7 +48,7 @@ public class SqliteAccountRepository implements AccountRepository {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "SELECT id, uuid, username, username_normalized, password_hash, status, " +
                     "failed_login_attempts, locked_until, created_at, updated_at, last_login_at, " +
-                    "password_changed_at FROM accounts WHERE username_normalized = ?";
+                    "password_changed_at, password_change_required, temporary_password_expires_at FROM accounts WHERE username_normalized = ?";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, usernameNormalized);
@@ -68,8 +68,9 @@ public class SqliteAccountRepository implements AccountRepository {
     public CompletableFuture<Account> save(Account account) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "INSERT INTO accounts (uuid, username, username_normalized, password_hash, status, " +
-                    "failed_login_attempts, locked_until, created_at, updated_at, last_login_at, password_changed_at) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    "failed_login_attempts, locked_until, created_at, updated_at, last_login_at, password_changed_at, " +
+                    "password_change_required, temporary_password_expires_at) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 stmt.setString(1, account.getUuid().toString());
@@ -83,6 +84,9 @@ public class SqliteAccountRepository implements AccountRepository {
                 stmt.setString(9, account.getUpdatedAt().toString());
                 stmt.setString(10, account.getLastLoginAt() != null ? account.getLastLoginAt().toString() : null);
                 stmt.setString(11, account.getPasswordChangedAt().toString());
+                stmt.setInt(12, account.isPasswordChangeRequiredFlag() ? 1 : 0);
+                stmt.setString(13, account.getTemporaryPasswordExpiresAt() != null
+                        ? account.getTemporaryPasswordExpiresAt().toString() : null);
 
                 stmt.executeUpdate();
 
@@ -94,7 +98,8 @@ public class SqliteAccountRepository implements AccountRepository {
                                 account.getStatus(), account.getFailedLoginAttempts(),
                                 account.getLockedUntil(), account.getCreatedAt(),
                                 account.getUpdatedAt(), account.getLastLoginAt(),
-                                account.getPasswordChangedAt());
+                                account.getPasswordChangedAt(), account.isPasswordChangeRequiredFlag(),
+                                account.getTemporaryPasswordExpiresAt());
                     }
                 }
             } catch (SQLException e) {
@@ -109,7 +114,7 @@ public class SqliteAccountRepository implements AccountRepository {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "UPDATE accounts SET username = ?, password_hash = ?, status = ?, " +
                     "failed_login_attempts = ?, locked_until = ?, updated_at = ?, last_login_at = ?, " +
-                    "password_changed_at = ? WHERE uuid = ?";
+                    "password_changed_at = ?, password_change_required = ?, temporary_password_expires_at = ? WHERE uuid = ?";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, account.getUsername());
@@ -120,7 +125,10 @@ public class SqliteAccountRepository implements AccountRepository {
                 stmt.setString(6, account.getUpdatedAt().toString());
                 stmt.setString(7, account.getLastLoginAt() != null ? account.getLastLoginAt().toString() : null);
                 stmt.setString(8, account.getPasswordChangedAt().toString());
-                stmt.setString(9, account.getUuid().toString());
+                stmt.setInt(9, account.isPasswordChangeRequiredFlag() ? 1 : 0);
+                stmt.setString(10, account.getTemporaryPasswordExpiresAt() != null
+                        ? account.getTemporaryPasswordExpiresAt().toString() : null);
+                stmt.setString(11, account.getUuid().toString());
 
                 return stmt.executeUpdate() > 0;
             } catch (SQLException e) {
@@ -180,8 +188,13 @@ public class SqliteAccountRepository implements AccountRepository {
         String lastLoginStr = rs.getString("last_login_at");
         Instant lastLoginAt = lastLoginStr != null ? Instant.parse(lastLoginStr) : null;
         Instant passwordChangedAt = Instant.parse(rs.getString("password_changed_at"));
+        boolean passwordChangeRequired = rs.getInt("password_change_required") != 0;
+        String temporaryPasswordExpiresAtStr = rs.getString("temporary_password_expires_at");
+        Instant temporaryPasswordExpiresAt = temporaryPasswordExpiresAtStr != null
+                ? Instant.parse(temporaryPasswordExpiresAtStr) : null;
 
         return new Account(id, uuid, username, usernameNormalized, passwordHash, status,
-                failedAttempts, lockedUntil, createdAt, updatedAt, lastLoginAt, passwordChangedAt);
+                failedAttempts, lockedUntil, createdAt, updatedAt, lastLoginAt, passwordChangedAt,
+                passwordChangeRequired, temporaryPasswordExpiresAt);
     }
 }
