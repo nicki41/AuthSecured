@@ -77,6 +77,8 @@ messages:
   admin-doctor-check-fail: "&c[FALLO] &7{message}"
   admin-doctor-database-ok: "Conexión con la base de datos"
   admin-doctor-database-fail: "La base de datos no está disponible"
+  admin-doctor-redis-ok: "Almacenamiento de límites de intentos"
+  admin-doctor-redis-fail: "Redis no está disponible; los límites son locales"
   admin-doctor-ip-secret-ok: "Secreto de hash de direcciones IP"
   admin-doctor-ip-secret-fail: "Falta AUTHSECURED_IP_SECRET"
   admin-doctor-alerts-ok: "Alertas de inicio de sesión"

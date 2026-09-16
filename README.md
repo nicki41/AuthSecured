@@ -1,4 +1,4 @@
-# AuthSecured 1.2.1
+# AuthSecured 1.2.2
 
 AuthSecured is one authentication codebase delivered as either a server plugin
 or a Fabric server mod. It supports Minecraft 1.21 through the current stable
@@ -6,7 +6,7 @@ release, 26.2.
 
 ## Platforms
 
-- Paper, Purpur, Spigot, and Leaf: install `authsecured-paper-1.2.1.jar` in
+- Paper, Purpur, Spigot, and Leaf: install `authsecured-paper-1.2.2.jar` in
   `plugins/`.
 - Fabric: install the JAR whose `+mc...` suffix exactly matches the Minecraft
   version in `mods/`, together with the matching Fabric API release.
@@ -49,8 +49,8 @@ select Java 21 for Minecraft 1.21.x and Java 25-compatible bytecode for 26.x.
 
 This runs every unit/integration test and builds:
 
-- `build/libs/authsecured-paper-1.2.1.jar`
-- `build/libs/authsecured-fabric-1.2.1+mc26.2.jar`
+- `build/libs/authsecured-paper-1.2.2.jar`
+- `build/libs/authsecured-fabric-1.2.2+mc26.2.jar`
 
 Build every supported Fabric target:
 
@@ -71,7 +71,9 @@ Build one Fabric target:
    (Fabric server). Fabric also requires Fabric API for the exact game version.
 3. Start once to generate `config/authsecured/` on Fabric or
    `plugins/AuthSecured/` on Paper.
-4. Set `AUTHSECURED_IP_SECRET` to a long random secret. Set database and Redis
+4. Set `AUTHSECURED_IP_SECRET` to a long random secret and restart. Authentication
+   stays blocked until this secret is set. Changing it later invalidates
+   IP-bound sessions and rate-limit identities. Set database and Redis
    environment variables when those integrations are enabled.
 5. Review online-mode bypass and all pre-authentication restrictions before
    exposing the server publicly.
@@ -118,6 +120,11 @@ desired `notifications.discord.enabled` or `notifications.telegram.enabled`
 channel. Credentials can be entered directly in `config.yml`, or more safely
 through `AUTHSECURED_DISCORD_WEBHOOK`, `AUTHSECURED_TELEGRAM_BOT_TOKEN`, and
 `AUTHSECURED_TELEGRAM_CHAT_ID`. Restart after changing notification endpoints.
+
+Audit and expired-session cleanup runs off the server thread at the configured
+interval. `logging.audit.retention-days` controls how long audit rows remain.
+For proxy networks using shared Redis limits, set `redis.required: true` so
+authentication fails closed if Redis becomes unavailable.
 
 ## Configuration and deployment
 

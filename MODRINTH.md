@@ -31,17 +31,17 @@ Paper-compatible servers use one plugin JAR across the supported range.
 
 ### Paper, Purpur, Spigot, or Leaf
 
-Place `authsecured-paper-1.2.1.jar` in `plugins/` and restart the server.
+Place `authsecured-paper-1.2.2.jar` in `plugins/` and restart the server.
 
 ### Fabric
 
-Place the exact `authsecured-fabric-1.2.1+mc<version>.jar` and the matching
+Place the exact `authsecured-fabric-1.2.2+mc<version>.jar` and the matching
 Fabric API in `mods/`, then restart the server.
 
 Minecraft 1.21.x uses Java 21. Minecraft 26.x uses Java 25 or newer. Do not load
 the Paper and Fabric artifacts together.
 
-After the first start, set a private `AUTHSECURED_IP_SECRET` and review the
+Set a private `AUTHSECURED_IP_SECRET` before accepting players and review the
 generated database, online-mode, session, and restriction settings.
 
 Author: touchfalls.

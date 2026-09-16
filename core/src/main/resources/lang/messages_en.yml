@@ -77,6 +77,8 @@ messages:
   admin-doctor-check-fail: "&c[FAIL] &7{message}"
   admin-doctor-database-ok: "Database connection"
   admin-doctor-database-fail: "Database is unavailable"
+  admin-doctor-redis-ok: "Rate-limit backend"
+  admin-doctor-redis-fail: "Redis is unavailable; rate limits are local only"
   admin-doctor-ip-secret-ok: "IP hashing secret"
   admin-doctor-ip-secret-fail: "AUTHSECURED_IP_SECRET is missing"
   admin-doctor-alerts-ok: "Login alerts"

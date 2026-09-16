@@ -9,7 +9,7 @@
   "environment": "server",
   "entrypoints": {
     "server": [
-      "com.example.authsecured.fabric.AuthSecuredFabricMod"
+      "io.github.touchfalls.authsecured.fabric.AuthSecuredFabricMod"
     ]
   },
   "mixins": [

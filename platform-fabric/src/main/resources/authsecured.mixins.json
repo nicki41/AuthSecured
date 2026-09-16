@@ -1,7 +1,7 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "com.example.authsecured.fabric.mixin",
+  "package": "io.github.touchfalls.authsecured.fabric.mixin",
   "compatibilityLevel": "${java_compatibility}",
   "mixins": [
     "CommandsMixin",

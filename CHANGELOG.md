@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2026-09-16
+
+### Security
+- Removed the public fallback IP hashing key. A private `AUTHSECURED_IP_SECRET` is now required for startup.
+- Unknown IP addresses no longer share a synthetic identity or create IP-bound reconnect sessions.
+- Stored Argon2id cost and output lengths are bounded before verification; malformed hashes produce safe diagnostics.
+- A locked account without a lock expiry remains locked until an administrator resolves it.
+- Unexpected authentication failures log exception types without credential-bearing exception messages.
+- Redis can be marked required, including at runtime; optional fallback is reported as degraded.
+- The in-memory rate-limit store has a hard capacity and amortized expiry cleanup.
+- Discord webhook URLs are restricted to official HTTPS endpoints.
+
+### Reliability and maintenance
+- SQLite enforces foreign keys on every pooled connection and tracks schema version 2.
+- SQLite migration scripts are executed with SQLite's native SQL parser, including triggers and quoted semicolons. Legacy partial schemas recreate missing V1 tables before their version is advanced.
+- Paper and Fabric trigger periodic off-thread cleanup of expired sessions and old audit records.
+- Audit retention and cleanup interval are configurable and validated.
+
+### Packaging
+- Moved project packages to `io.github.touchfalls.authsecured`.
+- Relocated bundled Gson and org.json; retained the original SQLite JNI package.
+- Minimized shaded artifacts while preserving reflective JDBC and Flyway dependencies.
+- Updated vulnerable Bouncy Castle, PostgreSQL JDBC, and Jackson dependencies, plus SQLite, HikariCP, Flyway, Jedis, SnakeYAML, Gson, and org.json.
+- Added Fabric metadata and bytecode consistency tests for exact Minecraft targets.
+
 ## [1.2.1] - 2026-09-15
 
 ### Security

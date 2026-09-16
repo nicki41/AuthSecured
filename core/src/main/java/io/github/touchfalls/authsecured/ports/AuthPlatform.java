@@ -1,0 +1,18 @@
+package io.github.touchfalls.authsecured.ports;
+
+import java.io.File;
+import java.util.UUID;
+
+/**
+ * Port representing the hosting Minecraft server platform.
+ */
+public interface AuthPlatform {
+    File getDataFolder();
+    PlatformLogger getLogger();
+    PlayerRestrictionAdapter getRestrictionAdapter();
+    void sendMessage(UUID playerUuid, String message);
+    void runTaskOnMainThread(Runnable task);
+    boolean isOnlineMode();
+    boolean isPlayerOnline(UUID playerUuid);
+    void disconnectPlayer(UUID playerUuid, String reason);
+}
