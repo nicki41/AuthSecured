@@ -38,8 +38,6 @@ tasks.shadowJar {
         exclude(dependency("com.zaxxer:HikariCP:.*"))
         exclude(dependency("redis.clients:jedis:.*"))
         exclude(dependency("org.yaml:snakeyaml:.*"))
-        exclude(dependency("com.google.code.gson:gson:.*"))
-        exclude(dependency("org.json:json:.*"))
     }
     exclude("META-INF/LICENSE*", "META-INF/NOTICE*")
     exclude("org/checkerframework/**") // Compile-time annotations only.

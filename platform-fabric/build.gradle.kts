@@ -115,8 +115,6 @@ tasks.named<ShadowJar>("shadowJar") {
         exclude(dependency("com.zaxxer:HikariCP:.*"))
         exclude(dependency("redis.clients:jedis:.*"))
         exclude(dependency("org.yaml:snakeyaml:.*"))
-        exclude(dependency("com.google.code.gson:gson:.*"))
-        exclude(dependency("org.json:json:.*"))
     }
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
     exclude("META-INF/LICENSE*", "META-INF/NOTICE*")
