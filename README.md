@@ -58,6 +58,9 @@ Build every supported Fabric target:
 ./build_fabric_matrix.sh
 ```
 
+GitHub Actions runs the same tests and builds for every push and pull request,
+and builds every Fabric target listed in `build_fabric_matrix.sh` in parallel.
+
 Build one Fabric target:
 
 ```bash
