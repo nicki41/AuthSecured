@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+- `/changepassword` now uses the same checks as `/login`: IP and account rate limits, the
+  failed-attempt counter, account locks and temporary-password expiry. Before login the command
+  is only accepted after a temporary password was accepted; Paper also enforces
+  `restrictions.allowed-commands` for password commands.
+- Fabric blocks pre-login commands sent through the signed-command packet (`/msg`, `/me`, or any
+  command from a modified client) and checks every command again in `Commands.performCommand`.
+  The command injections are now required, so a renamed handler fails loading instead of
+  silently allowing commands.
+- A locked account answers `ACCOUNT_LOCKED` for correct and wrong passwords alike, so the lock no
+  longer confirms a guessed password.
+- The in-memory rate-limit store evicts the soonest-expiring entry at capacity instead of
+  reporting every key as locked.
+- Paper stays fail-closed when startup throws an `Error` or the log filter cannot be installed.
+
+### Fixed
+- PostgreSQL security events are bound as JSONB (`Types.OTHER`) and were previously rejected;
+  plain-text audit metadata is wrapped into JSON.
+- Spigot: the restriction listener used the Paper-only `PlayerAttemptPickupItemEvent` and the
+  temporary-password message used Paper-only Adventure; both now use Bukkit/BungeeCord APIs.
+
+### Changed
+- Unauthenticated players cannot move at all: Paper sets walk/fly speed to zero, undoes every
+  position change (including jumps), blocks vehicles, gliding and pearl/portal/spectator
+  teleports; Fabric pulls the client back to its server position and blocks vehicle movement,
+  spectator teleports, creative-slot edits and hand swapping.
+
 ## [1.2.3] - 2026-10-23
 
 ### Added

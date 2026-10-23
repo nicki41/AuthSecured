@@ -10,6 +10,13 @@ import java.util.UUID;
 public interface PlayerRestrictionAdapter {
     void setPlayerAuthenticated(UUID playerUuid);
     void setPlayerUnauthenticated(UUID playerUuid, Object location);
+
+    /**
+     * Keeps the player restricted but allows the temporary-password change flow.
+     * Adapters that do not track this state reject pre-login password changes.
+     */
+    default void setPasswordChangeRequired(UUID playerUuid) {
+    }
     void removePlayer(UUID playerUuid);
     boolean isAuthenticated(UUID playerUuid);
     AuthState getAuthState(UUID playerUuid);

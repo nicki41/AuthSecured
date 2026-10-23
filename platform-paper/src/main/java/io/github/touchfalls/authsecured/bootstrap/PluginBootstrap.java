@@ -5,10 +5,13 @@ import io.github.touchfalls.authsecured.paper.adapter.PaperPlayerRestrictionAdap
 import io.github.touchfalls.authsecured.paper.command.*;
 import io.github.touchfalls.authsecured.paper.listener.*;
 import io.github.touchfalls.authsecured.paper.logging.PaperSensitiveCommandLogFilter;
+import io.github.touchfalls.authsecured.paper.player.PaperMovementLock;
 import io.github.touchfalls.authsecured.paper.player.PlayerRestrictionManager;
+import io.github.touchfalls.authsecured.util.FailureDiagnostics;
 import io.github.touchfalls.authsecured.util.SecretRedactor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -20,41 +23,65 @@ public class PluginBootstrap {
     private DependencyContainer container;
     private PlayerRestrictionManager restrictionManager;
     private PaperSensitiveCommandLogFilter sensitiveCommandLogFilter;
+    private PaperMovementLock movementLock;
 
     public PluginBootstrap(JavaPlugin plugin) {
         this.plugin = plugin;
     }
 
     public void enable() {
-        this.sensitiveCommandLogFilter = PaperSensitiveCommandLogFilter.install();
-        this.restrictionManager = new PlayerRestrictionManager();
-        PaperPlayerRestrictionAdapter restrictionAdapter = new PaperPlayerRestrictionAdapter(restrictionManager);
-        PaperAuthPlatform platform = new PaperAuthPlatform(plugin, restrictionAdapter);
-
-        this.container = new DependencyContainer(platform);
         try {
+            this.sensitiveCommandLogFilter = PaperSensitiveCommandLogFilter.install();
+            this.restrictionManager = new PlayerRestrictionManager();
+            PaperPlayerRestrictionAdapter restrictionAdapter = new PaperPlayerRestrictionAdapter(restrictionManager);
+            PaperAuthPlatform platform = new PaperAuthPlatform(plugin, restrictionAdapter);
+
+            this.container = new DependencyContainer(platform);
             this.container.init();
-        } catch (RuntimeException exception) {
-            this.container.close();
-            this.container = null;
-            Bukkit.getPluginManager().registerEvents(new InitializationFailureListener(), plugin);
+            this.movementLock = new PaperMovementLock(container.getConfigManager());
+            restrictionManager.setMovementLock(movementLock);
+
+            registerCommands();
+            registerListeners();
+            registerAuthenticationTimeoutTask();
+            registerMaintenanceTask();
             for (org.bukkit.entity.Player player : Bukkit.getOnlinePlayers()) {
-                player.kickPlayer("AuthSecured failed to initialize. Contact the server administrator.");
+                // Reload with players online: everyone must authenticate again.
+                restrictionManager.setPlayerUnauthenticated(player.getUniqueId(), player.getLocation());
             }
-            plugin.getLogger().severe("AuthSecured initialization failed. New logins are blocked. "
-                    + "Sensitive configuration details are hidden.");
+        } catch (Throwable failure) {
+            // Errors (LinkageError, missing server APIs) must also fail closed: if this method
+            // threw, Bukkit would disable the plugin and the server would run without authentication.
+            failClosed(failure);
+            if (failure instanceof VirtualMachineError fatal) throw fatal;
             return;
         }
-
-        registerCommands();
-        registerListeners();
-        registerAuthenticationTimeoutTask();
-        registerMaintenanceTask();
 
         plugin.getLogger().info("AuthSecured plugin successfully enabled!");
     }
 
+    private void failClosed(Throwable failure) {
+        try {
+            if (container != null) container.close();
+        } catch (Throwable closeFailure) {
+            plugin.getLogger().warning("AuthSecured cleanup after a failed start also failed ("
+                    + FailureDiagnostics.causeTypes(closeFailure) + ").");
+        }
+        container = null;
+        HandlerList.unregisterAll(plugin);
+        Bukkit.getScheduler().cancelTasks(plugin);
+        Bukkit.getPluginManager().registerEvents(new InitializationFailureListener(), plugin);
+        for (org.bukkit.entity.Player player : Bukkit.getOnlinePlayers()) {
+            player.kickPlayer("AuthSecured failed to initialize. Contact the server administrator.");
+        }
+        plugin.getLogger().severe("AuthSecured initialization failed (" + FailureDiagnostics.causeTypes(failure)
+                + "). New logins are blocked. Sensitive configuration details are hidden.");
+    }
+
     public void disable() {
+        if (movementLock != null) {
+            movementLock.unlockAll();
+        }
         if (container != null) {
             container.close();
         }
@@ -76,7 +103,7 @@ public class PluginBootstrap {
                 plugin
         ), plugin);
 
-        pm.registerEvents(new PaperSensitiveCommandListener(plugin), plugin);
+        pm.registerEvents(new PaperSensitiveCommandListener(plugin, restrictionManager, container.getConfigManager()), plugin);
 
         pm.registerEvents(new PlayerAuthRestrictionListener(
                 restrictionManager,
@@ -126,7 +153,7 @@ public class PluginBootstrap {
                             null,
                             io.github.touchfalls.authsecured.domain.security.SecurityEventType.AUTH_TIMEOUT,
                             null,
-                            "authentication deadline expired"
+                            "{\"reason\":\"authentication_deadline\"}"
                     );
                     org.bukkit.entity.Player player = Bukkit.getPlayer(uuid);
                     if (player != null) {

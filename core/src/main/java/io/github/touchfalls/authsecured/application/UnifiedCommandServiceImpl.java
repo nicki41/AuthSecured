@@ -76,6 +76,12 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
 
     @Override
     public CompletableFuture<Void> executeLogin(UUID playerUuid, String playerName, char[] password, String ipAddress) {
+        if (platform.getRestrictionAdapter().isAuthenticated(playerUuid)) {
+            if (password != null) Arrays.fill(password, ' ');
+            platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid,
+                    localizationManager.getMessage("messages.already-authenticated", "&cYou are already logged in!")));
+            return CompletableFuture.completedFuture(null);
+        }
         byte[] ipHash = ipHashService.hashIp(ipAddress);
         return authService.login(playerUuid, playerName, password, ipHash)
                 .thenAccept(result -> platform.runTaskOnMainThread(() -> {
@@ -84,6 +90,9 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
                         clearAuthenticationTimeout(playerUuid);
                         platform.sendMessage(playerUuid, localizationManager.getMessage("messages.login-success"));
                     } else {
+                        if (result == AuthResult.PASSWORD_CHANGE_REQUIRED) {
+                            platform.getRestrictionAdapter().setPasswordChangeRequired(playerUuid);
+                        }
                         String msgKey = switch (result) {
                             case ACCOUNT_NOT_FOUND, NOT_REGISTERED, INVALID_PASSWORD -> "messages.login-failed";
                             case ACCOUNT_LOCKED -> "messages.account-locked";
@@ -107,8 +116,24 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
 
     @Override
     public CompletableFuture<Void> executeChangePassword(UUID playerUuid, char[] oldPassword, char[] newPassword, String ipAddress) {
+        return executeChangePassword(playerUuid, null, oldPassword, newPassword, ipAddress);
+    }
+
+    @Override
+    public CompletableFuture<Void> executeChangePassword(UUID playerUuid, String playerName, char[] oldPassword,
+                                                        char[] newPassword, String ipAddress) {
+        AuthState state = platform.getRestrictionAdapter().getAuthState(playerUuid);
+        if (state != AuthState.AUTHENTICATED && state != AuthState.PASSWORD_CHANGE_REQUIRED) {
+            // Before login the command only completes the temporary-password flow.
+            if (oldPassword != null) Arrays.fill(oldPassword, ' ');
+            if (newPassword != null) Arrays.fill(newPassword, ' ');
+            platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid,
+                    localizationManager.getMessage("messages.changepass-login-first",
+                            "&cLog in with /login <password> before changing your password.")));
+            return CompletableFuture.completedFuture(null);
+        }
         byte[] ipHash = ipHashService.hashIp(ipAddress);
-        return authService.changePassword(playerUuid, oldPassword, newPassword, ipHash)
+        return authService.changePassword(playerUuid, playerName, oldPassword, newPassword, ipHash)
                 .thenAccept(result -> platform.runTaskOnMainThread(() -> {
                     if (result == AuthResult.SUCCESS) {
                         platform.getRestrictionAdapter().setPlayerAuthenticated(playerUuid);
@@ -116,9 +141,12 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
                         platform.sendMessage(playerUuid, localizationManager.getMessage("messages.changepass-success"));
                     } else {
                         String msgKey = switch (result) {
-                            case INVALID_PASSWORD -> "messages.old-password-invalid";
+                            case INVALID_PASSWORD, ACCOUNT_NOT_FOUND -> "messages.old-password-invalid";
                             case PASSWORD_UNCHANGED -> "messages.password-unchanged";
                             case VALIDATION_FAILED -> "messages.password-policy-failed";
+                            case RATE_LIMITED -> "messages.rate-limited";
+                            case ACCOUNT_LOCKED -> "messages.account-locked";
+                            case TEMPORARY_PASSWORD_EXPIRED -> "messages.temporary-password-expired";
                             default -> "messages.error";
                         };
                         platform.sendMessage(playerUuid, localizationManager.getMessage(msgKey));

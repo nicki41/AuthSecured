@@ -62,8 +62,16 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
                 this.initialized = true;
                 LOGGER.info("AuthSecured initialized for Fabric at {}",
                         platform.getDataFolder().getAbsolutePath());
-            } catch (RuntimeException exception) {
+            } catch (Exception | LinkageError exception) {
                 initialized = false;
+                if (container != null) {
+                    try {
+                        container.close();
+                    } catch (RuntimeException closeFailure) {
+                        LOGGER.warn("AuthSecured cleanup after a failed start also failed");
+                    }
+                    container = null;
+                }
                 LOGGER.error("AuthSecured failed to initialize; players will remain restricted", exception);
             }
         });
@@ -90,6 +98,9 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
             if (address == null) playerAddresses.remove(uuid);
             else playerAddresses.put(uuid, address);
             restrictionAdapter.setPlayerUnauthenticated(uuid, null);
+            if (player.isPassenger() && isRestricted(uuid, "restrictions.freeze-player", true)) {
+                player.stopRiding();
+            }
 
             if (!initialized) {
                 player.sendSystemMessage(Component.literal(message("messages.initialization-failed",
@@ -159,7 +170,7 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
                             null,
                             io.github.touchfalls.authsecured.domain.security.SecurityEventType.AUTH_TIMEOUT,
                             null,
-                            "authentication deadline expired"
+                            "{\"reason\":\"authentication_deadline\"}"
                     );
                     platform.disconnectPlayer(uuid, container.getConfigManager().getMessage(
                             "messages.authentication-timeout-kick",
@@ -237,6 +248,12 @@ public final class AuthSecuredFabricMod implements DedicatedServerModInitializer
                 .stream()
                 .map(value -> value.toLowerCase(Locale.ROOT))
                 .anyMatch(normalized::equals);
+    }
+
+    /** True when the player has not authenticated and the command is outside the pre-login allow-list. */
+    public boolean isCommandBlocked(UUID uuid, String command) {
+        return isRestricted(uuid, "restrictions.block-commands", true)
+                && (command == null || !isAllowedCommand(command));
     }
 
     public boolean shouldBlockFlight(UUID uuid) {

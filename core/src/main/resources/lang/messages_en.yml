@@ -5,6 +5,7 @@ messages:
   login-usage: "&cUsage: /login <password>"
   register-usage: "&cUsage: /register <password> <confirmPassword>"
   changepass-usage: "&cUsage: /changepassword <oldPassword> <newPassword>"
+  changepass-login-first: "&cLog in with /login <password> before changing your password."
   login-success: "&aSuccessfully logged in!"
   register-success: "&aSuccessfully registered and logged in!"
   changepass-success: "&aPassword changed successfully!"

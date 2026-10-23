@@ -77,7 +77,12 @@ public class DatabaseAuditRepository implements AuditRepository {
                 }
                 stmt.setString(2, event.getEventType().name());
                 stmt.setBytes(3, event.getIpHash());
-                stmt.setString(4, event.getMetadataJson());
+                if (isPostgres) {
+                    // PgJDBC binds setString as varchar, which PostgreSQL refuses to assign to JSONB.
+                    stmt.setObject(4, event.getMetadataJson(), java.sql.Types.OTHER);
+                } else {
+                    stmt.setString(4, event.getMetadataJson());
+                }
                 if (isPostgres) {
                     stmt.setTimestamp(5, Timestamp.from(event.getCreatedAt()));
                 } else {

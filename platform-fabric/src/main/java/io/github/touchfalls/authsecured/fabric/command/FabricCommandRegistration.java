@@ -67,7 +67,7 @@ public final class FabricCommandRegistration {
                         .then(Commands.argument("newPassword", StringArgumentType.string()).executes(context -> {
                             ServerPlayer player = context.getSource().getPlayerOrException();
                             if (!ready(mod, player)) return 0;
-                            executor(mod).executeChangePassword(player.getUUID(),
+                            executor(mod).executeChangePassword(player.getUUID(), player.getName().getString(),
                                     StringArgumentType.getString(context, "oldPassword").toCharArray(),
                                     StringArgumentType.getString(context, "newPassword").toCharArray(),
                                     mod.getPlayerAddress(player.getUUID()));

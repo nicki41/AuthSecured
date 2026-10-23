@@ -5,6 +5,7 @@ messages:
   login-usage: "&cИспользование: /login <пароль>"
   register-usage: "&cИспользование: /register <пароль> <повторПароля>"
   changepass-usage: "&cИспользование: /changepassword <старыйПароль> <новыйПароль>"
+  changepass-login-first: "&cСначала войдите через /login <пароль>, затем меняйте пароль."
   login-success: "&aВы успешно вошли в игру!"
   register-success: "&aРегистрация успешна! Вы вошли в систему."
   changepass-success: "&aПароль был успешно изменен!"

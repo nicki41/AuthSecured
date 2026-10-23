@@ -27,6 +27,11 @@ public class PaperPlayerRestrictionAdapter implements PlayerRestrictionAdapter {
     }
 
     @Override
+    public void setPasswordChangeRequired(UUID playerUuid) {
+        restrictionManager.setPasswordChangeRequired(playerUuid);
+    }
+
+    @Override
     public void removePlayer(UUID playerUuid) {
         restrictionManager.removePlayer(playerUuid);
     }

@@ -54,37 +54,50 @@ public class AuthService {
         return loginService.login(playerUuid, username, password, ipHash);
     }
 
+    /** @deprecated Supply the player name so account rate limits use the same key as {@code /login}. */
+    @Deprecated
     public CompletableFuture<AuthResult> changePassword(UUID playerUuid, char[] oldPassword, char[] newPassword, byte[] ipHash) {
+        return changePassword(playerUuid, null, oldPassword, newPassword, ipHash);
+    }
+
+    /**
+     * Changes the password after the old one passes the same checks as {@code /login}:
+     * rate limits, failed-attempt counter, account lock and temporary-password expiry.
+     */
+    public CompletableFuture<AuthResult> changePassword(UUID playerUuid, String username, char[] oldPassword,
+                                                        char[] newPassword, byte[] ipHash) {
         if (!passwordService.validatePolicy(newPassword)) {
             return CompletableFuture.completedFuture(AuthResult.VALIDATION_FAILED);
         }
+        if (ipHash == null || ipHash.length == 0) {
+            if (logger != null) {
+                logger.severe("Password change rejected because the client IP is unavailable. Check proxy forwarding.");
+            }
+            return CompletableFuture.completedFuture(AuthResult.INTERNAL_ERROR);
+        }
 
-        return accountRepository.findByUuid(playerUuid)
-                .thenCompose(optAccount -> {
-                    if (optAccount.isEmpty()) {
-                        return CompletableFuture.completedFuture(AuthResult.ACCOUNT_NOT_FOUND);
+        return loginService.verifyCredentials(playerUuid, username, oldPassword, ipHash)
+                .thenCompose(check -> {
+                    if (!check.accepted()) {
+                        return CompletableFuture.completedFuture(check.result());
                     }
-                    Account account = optAccount.get();
-
-                    return passwordService.verifyPasswordAsync(oldPassword, account.getPasswordHash())
-                            .thenCompose(valid -> {
-                                if (!valid) {
-                                    return CompletableFuture.completedFuture(AuthResult.INVALID_PASSWORD);
-                                }
-                                if (constantTimeEquals(oldPassword, newPassword)) {
-                                    return CompletableFuture.completedFuture(AuthResult.PASSWORD_UNCHANGED);
-                                }
-                                return passwordService.hashPasswordAsync(newPassword)
-                                        .thenCompose(newHash -> {
-                                            account.updatePassword(newHash, java.time.Instant.now());
-                                            return accountRepository.update(account)
-                                                    .thenCompose(updated -> updated
-                                                            ? sessionService.revokeAllSessionsForAccount(account.getId())
-                                                            : CompletableFuture.failedFuture(
-                                                                    new IllegalStateException("Account update failed")))
-                                                    .thenCompose(v -> securityService.logSecurityEvent(account.getId(), SecurityEventType.PASSWORD_CHANGE, ipHash, "{}"))
-                                                    .thenApply(v -> AuthResult.SUCCESS);
-                                        });
+                    Account account = check.account();
+                    if (constantTimeEquals(oldPassword, newPassword)) {
+                        return CompletableFuture.completedFuture(AuthResult.PASSWORD_UNCHANGED);
+                    }
+                    return passwordService.hashPasswordAsync(newPassword)
+                            .thenCompose(newHash -> {
+                                Instant now = Instant.now();
+                                account.updatePassword(newHash, now);
+                                return accountRepository.update(account)
+                                        .thenCompose(updated -> updated
+                                                ? loginService.recordSuccessfulAuthentication(
+                                                        account, check.usernameNormalized(), now)
+                                                : CompletableFuture.failedFuture(
+                                                        new IllegalStateException("Account update failed")))
+                                        .thenCompose(v -> sessionService.revokeAllSessionsForAccount(account.getId()))
+                                        .thenCompose(v -> securityService.logSecurityEvent(account.getId(), SecurityEventType.PASSWORD_CHANGE, ipHash, "{}"))
+                                        .thenApply(v -> AuthResult.SUCCESS);
                             });
                 }).exceptionally(ex -> {
                     if (logger != null) logger.severe("Password change failed internally ("

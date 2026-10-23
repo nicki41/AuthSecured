@@ -2,6 +2,7 @@ package io.github.touchfalls.authsecured.paper.command;
 
 import io.github.touchfalls.authsecured.application.AuthService;
 import io.github.touchfalls.authsecured.application.AuthenticationTimeoutService;
+import io.github.touchfalls.authsecured.domain.auth.AuthState;
 import io.github.touchfalls.authsecured.infrastructure.config.ConfigManager;
 import io.github.touchfalls.authsecured.infrastructure.security.IpHashService;
 import io.github.touchfalls.authsecured.paper.player.PlayerRestrictionManager;
@@ -44,6 +45,13 @@ public class ChangePasswordCommand implements CommandExecutor {
         }
 
         UUID uuid = player.getUniqueId();
+        AuthState state = restrictionManager.getAuthState(uuid);
+        if (state != AuthState.AUTHENTICATED && state != AuthState.PASSWORD_CHANGE_REQUIRED) {
+            // Before login the command only completes the temporary-password flow.
+            player.sendMessage(configManager.getMessage("messages.changepass-login-first",
+                    "&cLog in with /login <password> before changing your password."));
+            return true;
+        }
         if (args.length < 2) {
             player.sendMessage(configManager.getMessage("messages.changepass-usage", "&cUsage: /changepassword <oldPassword> <newPassword>"));
             return true;
@@ -56,7 +64,7 @@ public class ChangePasswordCommand implements CommandExecutor {
                 : null;
         byte[] ipHash = ipHashService.hashIp(ipStr);
 
-        authService.changePassword(uuid, oldPassword, newPassword, ipHash).thenAccept(result -> {
+        authService.changePassword(uuid, player.getName(), oldPassword, newPassword, ipHash).thenAccept(result -> {
             Arrays.fill(oldPassword, ' ');
             Arrays.fill(newPassword, ' ');
             Bukkit.getScheduler().runTask(plugin, () -> {
@@ -67,10 +75,18 @@ public class ChangePasswordCommand implements CommandExecutor {
                             authenticationTimeoutService.clear(uuid);
                             player.sendMessage(configManager.getMessage("messages.changepass-success", "&aPassword changed successfully!"));
                     }
-                    case INVALID_PASSWORD ->
+                    case INVALID_PASSWORD, ACCOUNT_NOT_FOUND ->
                             player.sendMessage(configManager.getMessage("messages.old-password-invalid", "&cOld password is incorrect."));
                     case VALIDATION_FAILED ->
                             player.sendMessage(configManager.getMessage("messages.password-policy-failed", "&cNew password does not meet policy requirements."));
+                    case PASSWORD_UNCHANGED ->
+                            player.sendMessage(configManager.getMessage("messages.password-unchanged", "&cThe new password must differ from the current password."));
+                    case RATE_LIMITED ->
+                            player.sendMessage(configManager.getMessage("messages.rate-limited", "&cToo many attempts. Please wait."));
+                    case ACCOUNT_LOCKED ->
+                            player.sendMessage(configManager.getMessage("messages.account-locked", "&cAccount is temporarily locked."));
+                    case TEMPORARY_PASSWORD_EXPIRED ->
+                            player.sendMessage(configManager.getMessage("messages.temporary-password-expired", "&cThe temporary password has expired. Contact an administrator."));
                     default ->
                             player.sendMessage(configManager.getMessage("messages.error", "&cAn internal error occurred."));
                 }

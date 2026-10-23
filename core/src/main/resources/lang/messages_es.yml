@@ -5,6 +5,7 @@ messages:
   login-usage: "&cUso: /login <contraseña>"
   register-usage: "&cUso: /register <contraseña> <confirmarContraseña>"
   changepass-usage: "&cUso: /changepassword <contraseñaAnterior> <nuevaContraseña>"
+  changepass-login-first: "&cInicia sesión con /login <contraseña> antes de cambiar tu contraseña."
   login-success: "&a¡Inicio de sesión exitoso!"
   register-success: "&a¡Registro completado e inicio de sesión exitoso!"
   changepass-success: "&a¡Contraseña cambiada con éxito!"

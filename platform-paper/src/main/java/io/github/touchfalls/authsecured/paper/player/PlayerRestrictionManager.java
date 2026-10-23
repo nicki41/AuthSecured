@@ -10,14 +10,32 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class PlayerRestrictionManager {
 
+    /** Applies and removes client-side movement locks; a no-op outside a running server. */
+    public interface MovementLock {
+        MovementLock NONE = new MovementLock() {
+            @Override public void lock(UUID playerUuid) { }
+            @Override public void unlock(UUID playerUuid) { }
+        };
+
+        void lock(UUID playerUuid);
+
+        void unlock(UUID playerUuid);
+    }
+
     private final Set<UUID> authenticatedPlayers = ConcurrentHashMap.newKeySet();
     private final Map<UUID, Location> initialLocations = new ConcurrentHashMap<>();
     private final Map<UUID, AuthState> playerStates = new ConcurrentHashMap<>();
+    private volatile MovementLock movementLock = MovementLock.NONE;
+
+    public void setMovementLock(MovementLock movementLock) {
+        this.movementLock = movementLock == null ? MovementLock.NONE : movementLock;
+    }
 
     public void setPlayerAuthenticated(UUID playerUuid) {
         authenticatedPlayers.add(playerUuid);
         initialLocations.remove(playerUuid);
         playerStates.put(playerUuid, AuthState.AUTHENTICATED);
+        movementLock.unlock(playerUuid);
     }
 
     public void setPlayerUnauthenticated(UUID playerUuid, Location currentLocation) {
@@ -26,12 +44,20 @@ public class PlayerRestrictionManager {
         if (currentLocation != null) {
             initialLocations.putIfAbsent(playerUuid, currentLocation.clone());
         }
+        movementLock.lock(playerUuid);
+    }
+
+    /** Temporary password accepted: still restricted, but {@code /changepassword} may finish the login. */
+    public void setPasswordChangeRequired(UUID playerUuid) {
+        if (authenticatedPlayers.contains(playerUuid)) return;
+        playerStates.put(playerUuid, AuthState.PASSWORD_CHANGE_REQUIRED);
     }
 
     public void removePlayer(UUID playerUuid) {
         authenticatedPlayers.remove(playerUuid);
         initialLocations.remove(playerUuid);
         playerStates.remove(playerUuid);
+        movementLock.unlock(playerUuid);
     }
 
     public boolean isAuthenticated(UUID playerUuid) {

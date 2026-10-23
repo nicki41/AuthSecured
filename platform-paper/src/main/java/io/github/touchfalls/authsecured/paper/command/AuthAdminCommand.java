@@ -3,10 +3,10 @@ package io.github.touchfalls.authsecured.paper.command;
 import io.github.touchfalls.authsecured.bootstrap.AdminOperations;
 import io.github.touchfalls.authsecured.bootstrap.DependencyContainer;
 import io.github.touchfalls.authsecured.domain.auth.TemporaryPasswordReset;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.HoverEvent;
+import net.md_5.bungee.api.chat.TextComponent;
+import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -156,16 +156,17 @@ public final class AuthAdminCommand implements TabExecutor {
         char[] password = reset.copyPassword();
         try {
             String passwordText = new String(password);
-            LegacyComponentSerializer legacy = LegacyComponentSerializer.legacySection();
-            Component prefix = legacy.deserialize(message("messages.admin-temporary-password-prefix",
-                    "&eTemporary password for &f{player}&e: ", Map.of("player", target)));
-            Component secret = legacy.deserialize(message("messages.admin-temporary-password-copy",
-                            "&f{password}", Map.of("password", passwordText)))
-                    .clickEvent(ClickEvent.copyToClipboard(passwordText))
-                    .hoverEvent(HoverEvent.showText(legacy.deserialize(message(
-                            "messages.admin-temporary-password-hover",
-                            "&aClick to copy the temporary password."))));
-            sender.sendMessage(prefix.append(secret));
+            // BungeeCord chat components exist on Spigot and Paper; Adventure is Paper-only.
+            TextComponent line = new TextComponent(TextComponent.fromLegacyText(message(
+                    "messages.admin-temporary-password-prefix",
+                    "&eTemporary password for &f{player}&e: ", Map.of("player", target))));
+            TextComponent secret = new TextComponent(TextComponent.fromLegacyText(message(
+                    "messages.admin-temporary-password-copy", "&f{password}", Map.of("password", passwordText))));
+            secret.setClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, passwordText));
+            secret.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(message(
+                    "messages.admin-temporary-password-hover", "&aClick to copy the temporary password."))));
+            line.addExtra(secret);
+            sender.spigot().sendMessage(line);
             sender.sendMessage(message("messages.admin-temporary-password-expires",
                     "&7Expires at: {expires}. The player must use /changepassword <temporary> <new>.",
                     Map.of("expires", reset.getExpiresAt().toString())));

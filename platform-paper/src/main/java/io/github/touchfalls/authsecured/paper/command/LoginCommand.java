@@ -76,8 +76,10 @@ public class LoginCommand implements CommandExecutor {
                             player.sendMessage(configManager.getMessage("messages.account-locked", "&cAccount is temporarily locked."));
                     case RATE_LIMITED ->
                             player.sendMessage(configManager.getMessage("messages.rate-limited", "&cToo many attempts. Please wait."));
-                    case PASSWORD_CHANGE_REQUIRED ->
+                    case PASSWORD_CHANGE_REQUIRED -> {
+                            restrictionManager.setPasswordChangeRequired(uuid);
                             player.sendMessage(configManager.getMessage("messages.temporary-password-change-required", "&eTemporary password accepted. Use /changepassword <temporary> <newPassword>."));
+                    }
                     case TEMPORARY_PASSWORD_EXPIRED ->
                             player.sendMessage(configManager.getMessage("messages.temporary-password-expired", "&cThe temporary password has expired. Contact an administrator."));
                     default ->

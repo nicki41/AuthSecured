@@ -26,4 +26,27 @@ class AuthStateTest {
         assertEquals(AuthState.AUTH_REQUIRED, manager.getAuthState(uuid));
         assertFalse(manager.isAuthenticated(uuid));
     }
+
+    @Test
+    void temporaryPasswordStateStaysRestrictedAndMovementLockFollowsState() {
+        PlayerRestrictionManager manager = new PlayerRestrictionManager();
+        java.util.List<String> calls = new java.util.ArrayList<>();
+        manager.setMovementLock(new PlayerRestrictionManager.MovementLock() {
+            @Override public void lock(UUID playerUuid) { calls.add("lock"); }
+            @Override public void unlock(UUID playerUuid) { calls.add("unlock"); }
+        });
+        UUID uuid = UUID.randomUUID();
+
+        manager.setPlayerUnauthenticated(uuid, null);
+        manager.setPasswordChangeRequired(uuid);
+        assertEquals(AuthState.PASSWORD_CHANGE_REQUIRED, manager.getAuthState(uuid));
+        assertFalse(manager.isAuthenticated(uuid));
+
+        manager.setPlayerAuthenticated(uuid);
+        manager.setPasswordChangeRequired(uuid);
+        assertEquals(AuthState.AUTHENTICATED, manager.getAuthState(uuid));
+
+        manager.removePlayer(uuid);
+        assertEquals(java.util.List.of("lock", "unlock", "unlock"), calls);
+    }
 }

@@ -22,6 +22,12 @@ public final class FabricPlayerRestrictionAdapter implements PlayerRestrictionAd
     }
 
     @Override
+    public void setPasswordChangeRequired(UUID playerUuid) {
+        playerStates.computeIfPresent(playerUuid, (uuid, state) ->
+                state == AuthState.AUTHENTICATED ? state : AuthState.PASSWORD_CHANGE_REQUIRED);
+    }
+
+    @Override
     public void removePlayer(UUID playerUuid) {
         playerStates.remove(playerUuid);
     }

@@ -5,6 +5,7 @@ messages:
   login-usage: "&cUtilisation : /login <motDePasse>"
   register-usage: "&cUtilisation : /register <motDePasse> <confirmerMotDePasse>"
   changepass-usage: "&cUtilisation : /changepassword <ancienMotDePasse> <nouveauMotDePasse>"
+  changepass-login-first: "&cConnectez-vous avec /login <mot_de_passe> avant de changer votre mot de passe."
   login-success: "&aConnexion réussie !"
   register-success: "&aInscription réussie ! Vous êtes connecté."
   changepass-success: "&aMot de passe modifié avec succès !"

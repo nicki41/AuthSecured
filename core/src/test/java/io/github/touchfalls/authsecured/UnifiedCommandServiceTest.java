@@ -127,4 +127,45 @@ class UnifiedCommandServiceTest {
         verify(restrictionAdapter).getAuthState(playerUuid);
         verify(platform).sendMessage(eq(playerUuid), argThat(message -> message.contains("вы авторизованы")));
     }
+
+    @Test
+    @DisplayName("Password change before login is refused without checking the password")
+    void changePasswordBeforeLoginIsRejected() {
+        UUID playerUuid = UUID.randomUUID();
+        when(restrictionAdapter.getAuthState(playerUuid)).thenReturn(AuthState.AUTH_REQUIRED);
+
+        commandExecutor.executeChangePassword(playerUuid, "TestPlayer",
+                "guess12345".toCharArray(), "newPassword12".toCharArray(), "127.0.0.1").join();
+
+        verify(authService, never()).changePassword(any(), any(), any(), any(), any());
+        verify(restrictionAdapter, never()).setPlayerAuthenticated(any());
+        verify(platform).sendMessage(eq(playerUuid), contains("/login"));
+    }
+
+    @Test
+    @DisplayName("Temporary-password state may finish the login with a password change")
+    void changePasswordAfterTemporaryPasswordIsAllowed() {
+        UUID playerUuid = UUID.randomUUID();
+        when(restrictionAdapter.getAuthState(playerUuid)).thenReturn(AuthState.PASSWORD_CHANGE_REQUIRED);
+        when(authService.changePassword(eq(playerUuid), eq("TestPlayer"), any(), any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(AuthResult.SUCCESS));
+
+        commandExecutor.executeChangePassword(playerUuid, "TestPlayer",
+                "Temporary123".toCharArray(), "newPassword12".toCharArray(), "127.0.0.1").join();
+
+        verify(restrictionAdapter).setPlayerAuthenticated(playerUuid);
+    }
+
+    @Test
+    @DisplayName("Accepted temporary password marks the player for the password-change flow")
+    void temporaryPasswordLoginMarksPasswordChangeState() {
+        UUID playerUuid = UUID.randomUUID();
+        when(authService.login(eq(playerUuid), eq("TestPlayer"), any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(AuthResult.PASSWORD_CHANGE_REQUIRED));
+
+        commandExecutor.executeLogin(playerUuid, "TestPlayer", "Temporary123".toCharArray(), "127.0.0.1").join();
+
+        verify(restrictionAdapter).setPasswordChangeRequired(playerUuid);
+        verify(restrictionAdapter, never()).setPlayerAuthenticated(any());
+    }
 }

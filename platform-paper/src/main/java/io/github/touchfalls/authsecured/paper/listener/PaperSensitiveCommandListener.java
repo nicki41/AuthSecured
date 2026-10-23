@@ -8,8 +8,12 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import io.github.touchfalls.authsecured.util.SecretRedactor;
+import io.github.touchfalls.authsecured.infrastructure.config.ConfigManager;
+import io.github.touchfalls.authsecured.paper.player.PlayerRestrictionManager;
+import org.bukkit.entity.Player;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -18,10 +22,22 @@ import java.util.Locale;
  */
 public final class PaperSensitiveCommandListener implements Listener {
 
+    private static final List<String> DEFAULT_ALLOWED = List.of(
+            "/login", "/l", "/register", "/reg", "/changepassword", "/cp");
+
     private final JavaPlugin plugin;
+    private final PlayerRestrictionManager restrictionManager;
+    private final ConfigManager configManager;
 
     public PaperSensitiveCommandListener(JavaPlugin plugin) {
+        this(plugin, null, null);
+    }
+
+    public PaperSensitiveCommandListener(JavaPlugin plugin, PlayerRestrictionManager restrictionManager,
+                                         ConfigManager configManager) {
         this.plugin = plugin;
+        this.restrictionManager = restrictionManager;
+        this.configManager = configManager;
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -39,9 +55,29 @@ public final class PaperSensitiveCommandListener implements Listener {
 
         event.setMessage("/" + parsed.label() + " [REDACTED]");
         event.setCancelled(true);
+        if (!isAllowedBeforeLogin(event.getPlayer(), parsed.label())) {
+            event.getPlayer().sendMessage(configManager.getMessage("messages.command-blocked",
+                    "&cYou must authenticate before using this command!"));
+            return;
+        }
         PluginCommand selectedCommand = command;
         plugin.getServer().getScheduler().runTask(plugin, () -> executor.onCommand(
                 event.getPlayer(), selectedCommand, parsed.label(), parsed.arguments()));
+    }
+
+    /** Password commands bypass normal dispatch, so the pre-login allow-list is enforced here as well. */
+    private boolean isAllowedBeforeLogin(Player player, String label) {
+        if (restrictionManager == null || configManager == null
+                || restrictionManager.isAuthenticated(player.getUniqueId())
+                || !configManager.getBoolean("restrictions.block-commands", true)) {
+            return true;
+        }
+        return isAllowed(label, configManager.getStringList("restrictions.allowed-commands", DEFAULT_ALLOWED));
+    }
+
+    static boolean isAllowed(String label, List<String> allowedCommands) {
+        String command = "/" + label.toLowerCase(Locale.ROOT);
+        return allowedCommands.stream().anyMatch(allowed -> allowed.toLowerCase(Locale.ROOT).equals(command));
     }
 
     private PluginCommand resolvePasswordCommand(String label) {

@@ -20,4 +20,13 @@ class PaperSensitiveCommandListenerTest {
     void ignoresMessagesThatAreNotCommands() {
         assertNull(PaperSensitiveCommandListener.parse("login VerySecret"));
     }
+
+    @Test
+    void preLoginAllowListAppliesToPasswordCommands() {
+        java.util.List<String> allowed = java.util.List.of("/login", "/L", "/register");
+        assertTrue(PaperSensitiveCommandListener.isAllowed("login", allowed));
+        assertTrue(PaperSensitiveCommandListener.isAllowed("l", allowed));
+        assertFalse(PaperSensitiveCommandListener.isAllowed("changepassword", allowed));
+        assertFalse(PaperSensitiveCommandListener.isAllowed("cp", allowed));
+    }
 }

@@ -11,10 +11,15 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.event.player.*;
+import org.bukkit.event.vehicle.VehicleEnterEvent;
+
+import java.util.Set;
 
 public class PlayerAuthRestrictionListener implements Listener {
 
@@ -26,23 +31,54 @@ public class PlayerAuthRestrictionListener implements Listener {
         this.configManager = configManager;
     }
 
+    private static final Set<String> BLOCKED_TELEPORT_CAUSES = Set.of(
+            "ENDER_PEARL", "CHORUS_FRUIT", "CONSUMABLE_EFFECT", "NETHER_PORTAL", "END_PORTAL",
+            "END_GATEWAY", "SPECTATE", "EXIT_BED");
+
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onPlayerMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
-        if (!restrictionManager.isAuthenticated(player.getUniqueId())) {
-            if (configManager.getBoolean("restrictions.freeze-player", true)) {
-                Location from = event.getFrom();
-                Location to = event.getTo();
-                if (from.getX() != to.getX() || from.getY() != to.getY() || from.getZ() != to.getZ()) {
-                    Location loc = restrictionManager.getInitialLocation(player.getUniqueId());
-                    if (loc != null) {
-                        event.setTo(loc);
-                    } else {
-                        event.setCancelled(true);
-                    }
-                }
+        if (!isFrozen(player)) return;
+        Location from = event.getFrom();
+        Location to = event.getTo();
+        if (to == null || from.getX() != to.getX() || from.getY() != to.getY() || from.getZ() != to.getZ()) {
+            // Any position change, including jumping and falling, is undone. Looking around stays allowed.
+            Location anchor = restrictionManager.getInitialLocation(player.getUniqueId());
+            if (anchor == null || to == null || !anchor.getWorld().equals(to.getWorld())) {
+                event.setCancelled(true);
+                return;
             }
+            Location frozen = anchor.clone();
+            frozen.setYaw(to.getYaw());
+            frozen.setPitch(to.getPitch());
+            event.setTo(frozen);
         }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onPlayerTeleport(PlayerTeleportEvent event) {
+        if (isFrozen(event.getPlayer()) && BLOCKED_TELEPORT_CAUSES.contains(event.getCause().name())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onVehicleEnter(VehicleEnterEvent event) {
+        if (event.getEntered() instanceof Player player && isFrozen(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onToggleGlide(EntityToggleGlideEvent event) {
+        if (event.isGliding() && event.getEntity() instanceof Player player && isFrozen(player)) {
+            event.setCancelled(true);
+        }
+    }
+
+    private boolean isFrozen(Player player) {
+        return !restrictionManager.isAuthenticated(player.getUniqueId())
+                && configManager.getBoolean("restrictions.freeze-player", true);
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -110,8 +146,9 @@ public class PlayerAuthRestrictionListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
-    public void onItemPickup(PlayerAttemptPickupItemEvent event) {
-        if (!restrictionManager.isAuthenticated(event.getPlayer().getUniqueId())) {
+    public void onItemPickup(EntityPickupItemEvent event) {
+        // Bukkit event (not Paper-only) so the whole listener also registers on Spigot.
+        if (event.getEntity() instanceof Player player && !restrictionManager.isAuthenticated(player.getUniqueId())) {
             if (configManager.getBoolean("restrictions.block-item-pickup", true)) {
                 event.setCancelled(true);
             }

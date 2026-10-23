@@ -28,8 +28,31 @@ public class SecurityService {
 
     public CompletableFuture<Void> logSecurityEvent(Long accountId, SecurityEventType eventType, byte[] ipHash, String metadataJson) {
         if (!auditEnabled) return CompletableFuture.completedFuture(null);
-        SecurityEvent event = new SecurityEvent(null, accountId, eventType, ipHash, metadataJson, Instant.now());
+        SecurityEvent event = new SecurityEvent(null, accountId, eventType, ipHash,
+                normalizeMetadata(metadataJson), Instant.now());
         return auditRepository.recordSecurityEvent(event);
+    }
+
+    /**
+     * Metadata is stored as JSON (JSONB on PostgreSQL). Plain text from older callers
+     * is wrapped into a JSON object instead of failing the insert.
+     */
+    static String normalizeMetadata(String metadata) {
+        if (metadata == null || metadata.isBlank()) return "{}";
+        String trimmed = metadata.strip();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) return trimmed;
+        StringBuilder escaped = new StringBuilder(trimmed.length() + 16).append("{\"detail\":\"");
+        for (char c : trimmed.toCharArray()) {
+            switch (c) {
+                case '"' -> escaped.append("\\\"");
+                case '\\' -> escaped.append("\\\\");
+                default -> {
+                    if (c < 0x20) escaped.append(String.format("\\u%04x", (int) c));
+                    else escaped.append(c);
+                }
+            }
+        }
+        return escaped.append("\"}").toString();
     }
 
     public CompletableFuture<Void> purgeAuditLogs(int loginAttemptsDays, int securityEventsDays) {
