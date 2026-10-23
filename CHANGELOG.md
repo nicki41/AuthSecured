@@ -2,7 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.2.3] - 2026-10-23
+
+### Added
+- Fabric support for Minecraft 26.3, mapped to Fabric API 0.164.0+26.3.
 
 ### Security
 - `/changepassword` now uses the same checks as `/login`: IP and account rate limits, the
@@ -26,18 +29,11 @@ All notable changes to this project will be documented in this file.
   temporary-password message used Paper-only Adventure; both now use Bukkit/BungeeCord APIs.
 
 ### Changed
+- Current maximum supported Minecraft release is now 26.3.
 - Unauthenticated players cannot move at all: Paper sets walk/fly speed to zero, undoes every
   position change (including jumps), blocks vehicles, gliding and pearl/portal/spectator
   teleports; Fabric pulls the client back to its server position and blocks vehicle movement,
   spectator teleports, creative-slot edits and hand swapping.
-
-## [1.2.3] - 2026-10-23
-
-### Added
-- Fabric support for Minecraft 26.3, mapped to Fabric API 0.164.0+26.3.
-
-### Changed
-- Current maximum supported Minecraft release is now 26.3.
 
 ## [1.2.2] - 2026-09-16
 
