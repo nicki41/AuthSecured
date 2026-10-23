@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.3] - 2026-10-23
+
+### Added
+- Fabric support for Minecraft 26.3, mapped to Fabric API 0.164.0+26.3.
+
+### Changed
+- Current maximum supported Minecraft release is now 26.3.
+
 ## [1.2.2] - 2026-09-16
 
 ### Security

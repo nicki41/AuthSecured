@@ -7,7 +7,7 @@ Fabric server mod.
 ## Supported servers
 
 - Minecraft 1.21 through 1.21.11
-- Minecraft 26.1 through 26.2
+- Minecraft 26.1 through 26.3
 - Paper, Purpur, Spigot, Leaf, and Fabric
 
 Fabric builds target an exact Minecraft version. Download the file whose
@@ -31,11 +31,11 @@ Paper-compatible servers use one plugin JAR across the supported range.
 
 ### Paper, Purpur, Spigot, or Leaf
 
-Place `authsecured-paper-1.2.2.jar` in `plugins/` and restart the server.
+Place `authsecured-paper-1.2.3.jar` in `plugins/` and restart the server.
 
 ### Fabric
 
-Place the exact `authsecured-fabric-1.2.2+mc<version>.jar` and the matching
+Place the exact `authsecured-fabric-1.2.3+mc<version>.jar` and the matching
 Fabric API in `mods/`, then restart the server.
 
 Minecraft 1.21.x uses Java 21. Minecraft 26.x uses Java 25 or newer. Do not load

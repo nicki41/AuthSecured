@@ -27,7 +27,8 @@ val fabricApiVersions = mapOf(
     "26.1" to "0.145.1+26.1",
     "26.1.1" to "0.145.4+26.1.1",
     "26.1.2" to "0.155.2+26.1.2",
-    "26.2" to "0.157.0+26.2"
+    "26.2" to "0.157.0+26.2",
+    "26.3" to "0.164.0+26.3"
 )
 val fabricApiVersion = fabricApiVersions[minecraftVersion]
     ?: error("Unsupported minecraft_version '$minecraftVersion'. See SUPPORTED_VERSIONS.md.")

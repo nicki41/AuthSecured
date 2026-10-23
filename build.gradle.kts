@@ -6,7 +6,7 @@ plugins {
 
 allprojects {
     group = "io.github.touchfalls.authsecured"
-    version = "1.2.2"
+    version = "1.2.3"
 
     repositories {
         mavenCentral()
