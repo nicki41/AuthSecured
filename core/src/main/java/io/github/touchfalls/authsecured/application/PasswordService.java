@@ -36,6 +36,10 @@ public class PasswordService {
         return len >= minLength && len <= maxLength;
     }
 
+    public boolean needsRehash(String passwordHash) {
+        return passwordHasher.needsRehash(passwordHash);
+    }
+
     public CompletableFuture<String> hashPasswordAsync(char[] password) {
         return submit(() -> passwordHasher.hash(password));
     }

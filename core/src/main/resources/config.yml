@@ -48,6 +48,7 @@ security:
 
     # Argon2id cost parameters. Defaults are suitable for most servers.
     # Increasing them improves resistance to cracking but uses more CPU/RAM.
+    # Existing passwords move to changed values the next time each player logs in.
     argon2:
       memory-kib: 65536       # 65536 KiB = 64 MiB per hashing operation
       iterations: 3
