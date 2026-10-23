@@ -12,6 +12,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
@@ -136,6 +137,14 @@ public final class AuthAdminCommand implements TabExecutor {
         if (args.length != 2) {
             sender.sendMessage(message("messages.admin-reset-usage",
                     "&cUsage: /authadmin resetpassword <player>"));
+            return;
+        }
+        if (!(sender instanceof Player)) {
+            // The console and RCON senders write sendMessage() to the server log;
+            // only an in-game sender can receive the password without logging it.
+            sender.sendMessage(message("messages.admin-reset-console-blocked",
+                    "&cRun this command in-game. The console and RCON cannot receive "
+                            + "the password without writing it to the server log."));
             return;
         }
         operations.issueTemporaryPassword(args[1]).whenComplete((reset, error) ->

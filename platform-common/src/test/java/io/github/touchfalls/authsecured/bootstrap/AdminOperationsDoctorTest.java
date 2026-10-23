@@ -17,7 +17,7 @@ class AdminOperationsDoctorTest {
     @TempDir Path directory;
 
     @Test
-    void missingSecretIsAnExplicitDoctorFailure() {
+    void fileBasedSecretWithSharedPostgresIsAnExplicitDoctorFailure() {
         ConfigManager config = new ConfigManager(directory.toFile(), mock(PlatformLogger.class));
         assertTrue(config.loadConfigurations());
         DependencyContainer container = mock(DependencyContainer.class);
@@ -28,11 +28,33 @@ class AdminOperationsDoctorTest {
         when(container.getSecurityService()).thenReturn(security);
         when(container.getRateLimitBackend()).thenReturn("memory");
         when(database.ping()).thenReturn(CompletableFuture.completedFuture(true));
+        when(database.getDatabaseType()).thenReturn("postgresql");
         when(security.isAuditEnabled()).thenReturn(true);
-        when(container.isIpHashSecretConfigured()).thenReturn(false);
+        when(container.isIpHashSecretFromEnvironment()).thenReturn(false);
 
         var lines = new AdminOperations(container).doctor().join();
         assertTrue(lines.stream().anyMatch(line -> line.contains("[FAIL]")
+                && line.contains("AUTHSECURED_IP_SECRET")));
+    }
+
+    @Test
+    void fileBasedSecretWithSqliteAndNoRedisIsFine() {
+        ConfigManager config = new ConfigManager(directory.toFile(), mock(PlatformLogger.class));
+        assertTrue(config.loadConfigurations());
+        DependencyContainer container = mock(DependencyContainer.class);
+        DatabaseManager database = mock(DatabaseManager.class);
+        SecurityService security = mock(SecurityService.class);
+        when(container.getConfigManager()).thenReturn(config);
+        when(container.getDatabaseManager()).thenReturn(database);
+        when(container.getSecurityService()).thenReturn(security);
+        when(container.getRateLimitBackend()).thenReturn("memory");
+        when(database.ping()).thenReturn(CompletableFuture.completedFuture(true));
+        when(database.getDatabaseType()).thenReturn("sqlite");
+        when(security.isAuditEnabled()).thenReturn(true);
+        when(container.isIpHashSecretFromEnvironment()).thenReturn(false);
+
+        var lines = new AdminOperations(container).doctor().join();
+        assertTrue(lines.stream().noneMatch(line -> line.contains("[FAIL]")
                 && line.contains("AUTHSECURED_IP_SECRET")));
     }
 }

@@ -9,6 +9,7 @@ import io.github.touchfalls.authsecured.ports.UnifiedCommandExecutor;
 import io.github.touchfalls.authsecured.util.FailureDiagnostics;
 
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -39,6 +40,13 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
 
     @Override
     public CompletableFuture<Void> executeRegister(UUID playerUuid, String playerName, char[] password, char[] confirmPassword, String ipAddress) {
+        if (platform.getRestrictionAdapter().isAuthenticated(playerUuid)) {
+            if (password != null) Arrays.fill(password, ' ');
+            if (confirmPassword != null) Arrays.fill(confirmPassword, ' ');
+            platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid,
+                    localizationManager.getMessage("messages.already-authenticated", "&cYou are already authenticated!")));
+            return CompletableFuture.completedFuture(null);
+        }
         if (!Arrays.equals(password, confirmPassword)) {
             platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid,
                     localizationManager.getMessage("messages.passwords-dont-match", "§cPasswords do not match!")));
@@ -47,8 +55,12 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
             return CompletableFuture.completedFuture(null);
         }
         byte[] ipHash = ipHashService.hashIp(ipAddress);
+        Object connectionToken = platform.currentConnectionToken(playerUuid);
         return authService.register(playerUuid, playerName, password, ipHash)
                 .thenAccept(result -> platform.runTaskOnMainThread(() -> {
+                    // A disconnect-and-reconnect under the same UUID while this was hashing must
+                    // not authenticate the new connection with the old one's result (audit #6).
+                    if (!Objects.equals(connectionToken, platform.currentConnectionToken(playerUuid))) return;
                     if (result == AuthResult.SUCCESS) {
                         platform.getRestrictionAdapter().setPlayerAuthenticated(playerUuid);
                         clearAuthenticationTimeout(playerUuid);
@@ -83,8 +95,12 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
             return CompletableFuture.completedFuture(null);
         }
         byte[] ipHash = ipHashService.hashIp(ipAddress);
+        Object connectionToken = platform.currentConnectionToken(playerUuid);
         return authService.login(playerUuid, playerName, password, ipHash)
                 .thenAccept(result -> platform.runTaskOnMainThread(() -> {
+                    // A disconnect-and-reconnect under the same UUID while this was hashing must
+                    // not authenticate the new connection with the old one's result (audit #6).
+                    if (!Objects.equals(connectionToken, platform.currentConnectionToken(playerUuid))) return;
                     if (result == AuthResult.SUCCESS) {
                         platform.getRestrictionAdapter().setPlayerAuthenticated(playerUuid);
                         clearAuthenticationTimeout(playerUuid);
@@ -115,11 +131,6 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
     }
 
     @Override
-    public CompletableFuture<Void> executeChangePassword(UUID playerUuid, char[] oldPassword, char[] newPassword, String ipAddress) {
-        return executeChangePassword(playerUuid, null, oldPassword, newPassword, ipAddress);
-    }
-
-    @Override
     public CompletableFuture<Void> executeChangePassword(UUID playerUuid, String playerName, char[] oldPassword,
                                                         char[] newPassword, String ipAddress) {
         AuthState state = platform.getRestrictionAdapter().getAuthState(playerUuid);
@@ -133,8 +144,12 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
             return CompletableFuture.completedFuture(null);
         }
         byte[] ipHash = ipHashService.hashIp(ipAddress);
+        Object connectionToken = platform.currentConnectionToken(playerUuid);
         return authService.changePassword(playerUuid, playerName, oldPassword, newPassword, ipHash)
                 .thenAccept(result -> platform.runTaskOnMainThread(() -> {
+                    // A disconnect-and-reconnect under the same UUID while this was hashing must
+                    // not authenticate the new connection with the old one's result (audit #6).
+                    if (!Objects.equals(connectionToken, platform.currentConnectionToken(playerUuid))) return;
                     if (result == AuthResult.SUCCESS) {
                         platform.getRestrictionAdapter().setPlayerAuthenticated(playerUuid);
                         clearAuthenticationTimeout(playerUuid);
@@ -170,6 +185,11 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
 
     @Override
     public CompletableFuture<Void> executeLogout(UUID playerUuid) {
+        if (!platform.getRestrictionAdapter().isAuthenticated(playerUuid)) {
+            platform.runTaskOnMainThread(() -> platform.sendMessage(playerUuid,
+                    localizationManager.getMessage("messages.must-auth", "&cYou are not authenticated!")));
+            return CompletableFuture.completedFuture(null);
+        }
         return authService.getSessionService().revokeActiveSessionForPlayer(playerUuid)
                 .whenComplete((ignored, throwable) -> platform.runTaskOnMainThread(() -> {
                     platform.getRestrictionAdapter().setPlayerUnauthenticated(playerUuid, null);

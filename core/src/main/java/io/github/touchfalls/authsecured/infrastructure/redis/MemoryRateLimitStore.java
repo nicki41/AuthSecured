@@ -10,10 +10,11 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Bounded in-memory rate-limit store.
  *
- * <p>At capacity the entry that expires soonest is evicted. Overflow must never
- * turn into "everything is locked": an attacker who can create many keys (for
- * example by rotating offline-mode names or IPv6 addresses) would otherwise lock
- * every player out of the server.</p>
+ * <p>At capacity the counter with the lowest hit count is evicted (ties broken by
+ * soonest expiry), so a flood of single-shot fake keys is evicted before a key
+ * that has accumulated real failures. Overflow must never turn into "everything
+ * is locked": an attacker who can create many keys (for example by rotating
+ * offline-mode names or IPv6 addresses) would otherwise lock every player out.</p>
  */
 public class MemoryRateLimitStore implements RateLimitStore {
 
@@ -91,12 +92,18 @@ public class MemoryRateLimitStore implements RateLimitStore {
         locks.entrySet().removeIf(entry -> entry.getValue() < now);
     }
 
+    // shortcut: a count tie can still evict a key with one real failure; upgrade
+    // to per-IP buckets if that becomes an exploitable gap at the configured capacity.
     private void evictSoonestCounter() {
         String victim = null;
+        int lowestCount = Integer.MAX_VALUE;
         long soonest = Long.MAX_VALUE;
         for (Map.Entry<String, Counter> entry : counters.entrySet()) {
-            if (entry.getValue().expireAtEpochSecond() < soonest) {
-                soonest = entry.getValue().expireAtEpochSecond();
+            Counter value = entry.getValue();
+            if (value.count() < lowestCount
+                    || (value.count() == lowestCount && value.expireAtEpochSecond() < soonest)) {
+                lowestCount = value.count();
+                soonest = value.expireAtEpochSecond();
                 victim = entry.getKey();
             }
         }

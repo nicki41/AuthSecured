@@ -41,4 +41,24 @@ class WebhookSecurityNotifierTest {
         assertDoesNotThrow(() -> second.loginFailure("Player", "INVALID_PASSWORD"));
         verify(logger, times(2)).warning(contains("Discord webhook URL is invalid"));
     }
+
+    @Test
+    void floodingWithFakeNamesEvictsTheOldestEntryInsteadOfSilencingNewOnes() throws Exception {
+        WebhookSecurityNotifier notifier = new WebhookSecurityNotifier("", "", "", 300, LOGGER);
+        java.lang.reflect.Field field = WebhookSecurityNotifier.class.getDeclaredField("lastNotification");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, ?> cooldowns = (java.util.Map<String, ?>) field.get(notifier);
+
+        // Fill past capacity with distinct fake names, as an attacker rotating names would.
+        for (int i = 0; i < 10_001; i++) {
+            notifier.loginFailure("attacker" + i, "INVALID_PASSWORD");
+        }
+        assertEquals(10_000, cooldowns.size(), "the map must stay bounded");
+
+        // A brand-new, legitimate name must still be tracked, not silently dropped.
+        notifier.loginFailure("RealPlayer", "INVALID_PASSWORD");
+        assertEquals(10_000, cooldowns.size());
+        org.junit.jupiter.api.Assertions.assertTrue(cooldowns.containsKey("realplayer"));
+    }
 }

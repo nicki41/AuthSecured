@@ -96,17 +96,21 @@ public class SessionService {
         return sessionRepository.revokeAllForAccount(accountId);
     }
 
+    /**
+     * Revokes every session for the account behind this player, not only the most recent
+     * one: a player can have more than one active persistent session (for example from two
+     * different IPs, or a reconnect that outlived an earlier one), and /logout must end all
+     * of them, not leave an older session still valid.
+     */
     public CompletableFuture<Void> revokeActiveSessionForPlayer(UUID playerUuid) {
         if (!persistent) {
+            // The in-memory map holds at most one session per player, so there is nothing else to revoke.
             return initialization.thenRun(() -> volatileSessions.remove(playerUuid));
         }
         return sessionRepository.findActiveByPlayerUuid(playerUuid)
-                .thenCompose(optSession -> {
-                    if (optSession.isPresent()) {
-                        return sessionRepository.revoke(optSession.get().getId());
-                    }
-                    return CompletableFuture.completedFuture(null);
-                });
+                .thenCompose(optSession -> optSession
+                        .map(session -> revokeAllSessionsForAccount(session.getAccountId()))
+                        .orElseGet(() -> CompletableFuture.completedFuture(null)));
     }
 
     public CompletableFuture<Void> cleanupExpiredSessions() {

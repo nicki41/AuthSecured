@@ -57,7 +57,7 @@ public final class DependencyContainer implements AutoCloseable {
     private UnifiedCommandExecutor commandExecutor;
     private String rateLimitBackend = "memory";
     private RedisRateLimitStore redisRateLimitStore;
-    private boolean ipHashSecretConfigured;
+    private boolean ipHashSecretFromEnvironment;
 
     public DependencyContainer(AuthPlatform platform) {
         this.platform = platform;
@@ -72,10 +72,10 @@ public final class DependencyContainer implements AutoCloseable {
             throw new IllegalStateException("AuthSecured configuration is invalid");
         }
 
-        String ipHashSecret = IpSecretStore.loadOrCreate(dataFolder,
+        IpSecretStore.Secret ipHashSecret = IpSecretStore.loadOrCreate(dataFolder,
                 configManager.getString("security.ip-hashing.secret-env", ""), logger);
-        this.ipHashSecretConfigured = true;
-        this.ipHashService = new IpHashService(ipHashSecret, logger);
+        this.ipHashSecretFromEnvironment = ipHashSecret.fromEnvironment();
+        this.ipHashService = new IpHashService(ipHashSecret.value(), logger);
 
         String dbType = configManager.getString("database.type", "sqlite").toLowerCase(Locale.ROOT);
         if (!Set.of("sqlite", "postgresql", "postgres").contains(dbType)) {
@@ -322,8 +322,8 @@ public final class DependencyContainer implements AutoCloseable {
                 ? "memory-fallback" : rateLimitBackend;
     }
 
-    public boolean isIpHashSecretConfigured() {
-        return ipHashSecretConfigured;
+    public boolean isIpHashSecretFromEnvironment() {
+        return ipHashSecretFromEnvironment;
     }
 
     private static String firstNonBlank(String primary, String fallback) {

@@ -19,13 +19,18 @@ final class IpSecretStore {
     private static final String FILE_NAME = "ip-secret.key";
     private static final String OWNER_ONLY = "rw-------";
 
+    /** @param fromEnvironment false means the secret came from the per-server ip-secret.key
+     *                         file, which a server network sharing one database must set
+     *                         identically on every server instead (see {@link #loadOrCreate}). */
+    record Secret(String value, boolean fromEnvironment) {}
+
     private IpSecretStore() {}
 
-    static String loadOrCreate(File dataFolder, String configuredSecret, PlatformLogger logger) {
+    static Secret loadOrCreate(File dataFolder, String configuredSecret, PlatformLogger logger) {
         if (configuredSecret != null && !configuredSecret.isBlank()) {
             logger.warning("AUTHSECURED_IP_SECRET overrides ip-secret.key. Changing the secret invalidates "
                     + "IP-bound sessions and rate-limit identities.");
-            return configuredSecret;
+            return new Secret(configuredSecret, true);
         }
 
         Path path = dataFolder.toPath().resolve(FILE_NAME);
@@ -68,7 +73,7 @@ final class IpSecretStore {
             if (secret.isBlank()) {
                 throw new IllegalStateException("ip-secret.key is empty; set a private secret in this file");
             }
-            return secret;
+            return new Secret(secret, false);
         } catch (IOException exception) {
             throw new IllegalStateException("Cannot load or create private ip-secret.key", exception);
         }

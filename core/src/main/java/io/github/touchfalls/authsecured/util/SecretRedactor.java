@@ -4,13 +4,9 @@ import java.util.Set;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Locale;
-import java.util.regex.Pattern;
 
 public final class SecretRedactor {
 
-    private static final Pattern SENSITIVE_PATTERN = Pattern.compile(
-            "(?i)(password|pass|secret|token|hash|authkey)=['\"]?[^'\"\\s]+['\"]?"
-    );
     private static final Set<String> DEFAULT_PASSWORD_COMMANDS = Set.of(
             "login", "l", "register", "reg", "changepassword", "cp"
     );
@@ -30,11 +26,6 @@ public final class SecretRedactor {
 
     public static boolean isPasswordCommand(String label) {
         return label != null && passwordCommands.contains(unqualified(label));
-    }
-
-    public static String redact(String input) {
-        if (input == null) return null;
-        return SENSITIVE_PATTERN.matcher(input).replaceAll("$1=[REDACTED]");
     }
 
     /**

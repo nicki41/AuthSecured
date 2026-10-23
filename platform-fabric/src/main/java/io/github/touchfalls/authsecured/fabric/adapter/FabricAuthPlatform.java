@@ -80,6 +80,13 @@ public final class FabricAuthPlatform implements AuthPlatform {
     }
 
     @Override
+    public Object currentConnectionToken(UUID playerUuid) {
+        // A reconnecting player gets a new ServerPlayer entity; its identity is a safe token.
+        MinecraftServer currentServer = server;
+        return currentServer == null ? null : currentServer.getPlayerList().getPlayer(playerUuid);
+    }
+
+    @Override
     public void disconnectPlayer(UUID playerUuid, String reason) {
         MinecraftServer currentServer = server;
         if (currentServer == null) return;

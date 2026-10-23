@@ -29,10 +29,6 @@ public final class PaperSensitiveCommandListener implements Listener {
     private final PlayerRestrictionManager restrictionManager;
     private final ConfigManager configManager;
 
-    public PaperSensitiveCommandListener(JavaPlugin plugin) {
-        this(plugin, null, null);
-    }
-
     public PaperSensitiveCommandListener(JavaPlugin plugin, PlayerRestrictionManager restrictionManager,
                                          ConfigManager configManager) {
         this.plugin = plugin;

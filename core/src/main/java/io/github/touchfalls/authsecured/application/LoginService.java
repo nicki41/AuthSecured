@@ -124,7 +124,8 @@ public class LoginService {
 
         return rateLimitService.isIpRateLimited(ipHash).thenCompose(ipLimited -> {
             if (ipLimited) {
-                securityNotifier.loginFailure(alertName, "IP_RATE_LIMITED");
+                // Not alerted: this is a consequence of an already-reported attack, not a
+                // new event, and distinct fake names could otherwise flood the alert cooldown.
                 return securityService.logLoginAttempt(null, ipHash, false, "IP_RATE_LIMITED")
                         .thenApply(ignored -> rejected(AuthResult.RATE_LIMITED, requestedName));
             }
@@ -134,7 +135,6 @@ public class LoginService {
                         ? account.getUsernameNormalized() : requestedName;
                 return rateLimitService.isAccountRateLimited(normalized).thenCompose(accountLimited -> {
                     if (accountLimited) {
-                        securityNotifier.loginFailure(alertName, "ACCOUNT_RATE_LIMITED");
                         return securityService.logLoginAttempt(account == null ? null : account.getId(),
                                         ipHash, false, "ACCOUNT_RATE_LIMITED")
                                 .thenApply(ignored -> rejected(AuthResult.RATE_LIMITED, normalized));
@@ -199,6 +199,15 @@ public class LoginService {
                 .thenCompose(updated -> updated
                         ? rateLimitService.recordSuccessfulLogin(normalized)
                         : CompletableFuture.failedFuture(new IllegalStateException("Account disappeared")));
+    }
+
+    /**
+     * Clears the account's rate-limit lock and failed-attempt counter without touching the
+     * password. Used after an administrator unlocks an account or issues a temporary password,
+     * so the player is not immediately rate-limited again by the attempts that led to the lock.
+     */
+    public CompletableFuture<Void> clearRateLimit(String usernameNormalized) {
+        return rateLimitService.recordSuccessfulLogin(usernameNormalized);
     }
 
     private static CredentialCheck rejected(AuthResult result, String normalized) {

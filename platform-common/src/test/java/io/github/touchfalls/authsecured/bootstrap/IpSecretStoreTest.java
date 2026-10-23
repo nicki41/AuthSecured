@@ -18,12 +18,13 @@ class IpSecretStoreTest {
 
     @Test
     void generatesPersistentSecretWithOwnerOnlyPermissions() throws Exception {
-        String first = IpSecretStore.loadOrCreate(dataDirectory.toFile(), "", logger);
-        String second = IpSecretStore.loadOrCreate(dataDirectory.toFile(), null, logger);
+        String first = IpSecretStore.loadOrCreate(dataDirectory.toFile(), "", logger).value();
+        IpSecretStore.Secret second = IpSecretStore.loadOrCreate(dataDirectory.toFile(), null, logger);
         Path file = dataDirectory.resolve("ip-secret.key");
 
         assertEquals(64, first.length());
-        assertEquals(first, second);
+        assertEquals(first, second.value());
+        assertFalse(second.fromEnvironment());
         assertEquals(first, Files.readString(file).trim());
         if (Files.getFileAttributeView(file, PosixFileAttributeView.class) != null) {
             assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(file)));
@@ -35,12 +36,14 @@ class IpSecretStoreTest {
         Path file = dataDirectory.resolve("ip-secret.key");
         Files.writeString(file, "first-private-secret\n");
         assertEquals("first-private-secret",
-                IpSecretStore.loadOrCreate(dataDirectory.toFile(), "", logger));
+                IpSecretStore.loadOrCreate(dataDirectory.toFile(), "", logger).value());
         Files.writeString(file, "replacement-private-secret\n");
         assertEquals("replacement-private-secret",
-                IpSecretStore.loadOrCreate(dataDirectory.toFile(), "", logger));
-        assertEquals("environment-private-secret",
-                IpSecretStore.loadOrCreate(dataDirectory.toFile(), "environment-private-secret", logger));
+                IpSecretStore.loadOrCreate(dataDirectory.toFile(), "", logger).value());
+        IpSecretStore.Secret fromEnv =
+                IpSecretStore.loadOrCreate(dataDirectory.toFile(), "environment-private-secret", logger);
+        assertEquals("environment-private-secret", fromEnv.value());
+        assertTrue(fromEnv.fromEnvironment());
         assertEquals("replacement-private-secret", Files.readString(file).trim());
     }
 

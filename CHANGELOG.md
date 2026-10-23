@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.4] - 2026-10-23
+
+### Security
+- The in-memory rate-limit store evicts the lowest-count entry at capacity, so a flood of
+  cheap fake keys can no longer wipe a real account's failed-attempt count.
+- The per-IP account registration cap is read from the `accounts` table (a new
+  `registration_ip_hash` column, backfilled from existing audit history) instead of
+  `security_events`, so it keeps working with audit logging disabled or past retention.
+- A lock that has expired resets the failed-attempt counter to 1 instead of adding to the
+  stale total, so one more wrong guess right after expiry no longer re-locks the account.
+- Password-change, temporary-password and unlock writes touch only their own columns
+  instead of overwriting the whole account row, so they can no longer undo a failed-attempt
+  counter or lock written concurrently by a slower request.
+- IPv6 addresses are rounded to their /64 network prefix before hashing, closing an IP
+  rate-limit and registration-cap bypass through address rotation within one network.
+- Fabric: an asynchronous login/register/password-change result is dropped if the player
+  reconnected under a new connection while it was still computing.
+- Redis's increment and its expiry now run as one atomic script; a dropped connection
+  between the two could previously leave a counter with no expiry that never reset.
+- `/authadmin unlock` and issuing a temporary password also clear the rate-limit lock, so the
+  action takes effect immediately instead of leaving the player rate-limited.
+- `/authadmin resetpassword` refuses to run from the console or RCON, which would otherwise
+  write the password to the server log.
+- Login-failure webhook alerts no longer fire for already-rate-limited attempts, and the
+  alert cooldown table evicts its oldest entry instead of permanently dropping new names
+  once full.
+- `/logout` revokes every active session for the account, not only the most recently created
+  one.
+- `doctor` warns when the IP hashing secret is a per-server file but Redis or PostgreSQL is
+  enabled, since every server sharing that backend then needs the same secret.
+
+### Fixed
+- Jackson (pulled in transitively by Flyway) is now relocated in both shaded jars; the build
+  fails if it, or any JSON library, is not relocated.
+- The password-hashing queue is now bounded; a flood of login attempts is rejected instead of
+  growing the queue, and the passwords it holds, without limit.
+- Fabric: pre-login commands sent as a Brigadier password argument now accept any character
+  without quoting, matching Paper; the two-argument commands split the same way Paper's
+  command parsing already does.
+- A failed database migration now closes the connection pool instead of leaking it.
+
+### Changed
+- Paper's `/login`, `/register`, `/changepassword`, `/logout` and `/authstatus` commands now
+  delegate to the same `UnifiedCommandExecutor` Fabric uses, instead of duplicating the
+  authentication and state-management logic.
+
 ## [1.2.3] - 2026-10-23
 
 ### Added

@@ -67,6 +67,12 @@ public class PaperAuthPlatform implements AuthPlatform {
     }
 
     @Override
+    public Object currentConnectionToken(UUID playerUuid) {
+        // A reconnecting player gets a new Player instance; its identity is a safe token.
+        return Bukkit.getPlayer(playerUuid);
+    }
+
+    @Override
     public void disconnectPlayer(UUID playerUuid, String reason) {
         Player player = Bukkit.getPlayer(playerUuid);
         if (player != null && player.isOnline()) {

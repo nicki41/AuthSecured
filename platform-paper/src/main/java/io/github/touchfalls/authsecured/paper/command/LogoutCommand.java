@@ -1,27 +1,24 @@
 package io.github.touchfalls.authsecured.paper.command;
 
-import io.github.touchfalls.authsecured.application.AuthService;
-import io.github.touchfalls.authsecured.application.AuthenticationTimeoutService;
 import io.github.touchfalls.authsecured.infrastructure.config.ConfigManager;
-import io.github.touchfalls.authsecured.paper.player.PlayerRestrictionManager;
+import io.github.touchfalls.authsecured.ports.UnifiedCommandExecutor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+/**
+ * Parses {@code /logout}; all state changes and messaging live in
+ * {@link UnifiedCommandExecutor}, shared with Fabric.
+ */
 public class LogoutCommand implements CommandExecutor {
 
-    private final AuthService authService;
-    private final PlayerRestrictionManager restrictionManager;
+    private final UnifiedCommandExecutor commandExecutor;
     private final ConfigManager configManager;
-    private final AuthenticationTimeoutService authenticationTimeoutService;
 
-    public LogoutCommand(AuthService authService, PlayerRestrictionManager restrictionManager,
-                         ConfigManager configManager, AuthenticationTimeoutService authenticationTimeoutService) {
-        this.authService = authService;
-        this.restrictionManager = restrictionManager;
+    public LogoutCommand(UnifiedCommandExecutor commandExecutor, ConfigManager configManager) {
+        this.commandExecutor = commandExecutor;
         this.configManager = configManager;
-        this.authenticationTimeoutService = authenticationTimeoutService;
     }
 
     @Override
@@ -31,16 +28,7 @@ public class LogoutCommand implements CommandExecutor {
                     "messages.only-players", "&cOnly players can use this command."));
             return true;
         }
-
-        if (!restrictionManager.isAuthenticated(player.getUniqueId())) {
-            player.sendMessage(configManager.getMessage("messages.must-auth", "&cYou are not authenticated!"));
-            return true;
-        }
-
-        restrictionManager.setPlayerUnauthenticated(player.getUniqueId(), player.getLocation());
-        authenticationTimeoutService.start(player.getUniqueId());
-        authService.getSessionService().revokeActiveSessionForPlayer(player.getUniqueId());
-        player.sendMessage(configManager.getMessage("messages.logged-out", "&aYou have been logged out."));
+        commandExecutor.executeLogout(player.getUniqueId());
         return true;
     }
 }

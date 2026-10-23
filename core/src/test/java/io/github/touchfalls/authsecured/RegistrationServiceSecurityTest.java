@@ -47,7 +47,7 @@ class RegistrationServiceSecurityTest {
         when(accounts.findByUuid(any())).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
         when(passwords.validatePolicy(any())).thenReturn(true);
         when(passwords.hashPasswordAsync(any())).thenReturn(CompletableFuture.completedFuture("hash"));
-        when(accounts.save(any())).thenReturn(CompletableFuture.failedFuture(
+        when(accounts.save(any(), any())).thenReturn(CompletableFuture.failedFuture(
                 new DuplicateAccountException("duplicate", new IllegalStateException())));
 
         RegistrationService service = new RegistrationService(accounts, passwords, limits, security);

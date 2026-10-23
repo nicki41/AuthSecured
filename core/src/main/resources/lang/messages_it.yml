@@ -42,6 +42,7 @@ messages:
   admin-audit-player-usage: "&cUso: /authadmin audit player <nome> [limite]"
   admin-audit-limit-invalid: "&cIl limite dell'audit deve essere un numero intero compreso tra 1 e 100."
   admin-reset-usage: "&cUso: /authadmin resetpassword <giocatore>"
+  admin-reset-console-blocked: "&cEsegui questo comando in gioco. La console e RCON non possono ricevere la password senza scriverla nel log del server."
   admin-reset-failed: "&cImpossibile creare la password temporanea. Controlla il log del server."
   admin-account-not-found: "&cAccount non trovato."
   admin-temporary-password: "&ePassword temporanea per &f{player}&e: &f{password}"

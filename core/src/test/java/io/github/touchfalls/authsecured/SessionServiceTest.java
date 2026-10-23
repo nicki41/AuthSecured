@@ -82,6 +82,39 @@ class SessionServiceTest {
     }
 
     @Test
+    void logoutRevokesEveryPersistentSessionForTheAccountNotJustTheNewestOne() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        UUID playerUuid = UUID.randomUUID();
+        Long accountId = 7L;
+        // The repository's "active" lookup returns only the newest session, but the player
+        // may also have an older one still valid (e.g. from a different IP) that must also end.
+        Session newest = Session.create(accountId, playerUuid, "server1", 60);
+        Mockito.when(repository.findActiveByPlayerUuid(playerUuid))
+                .thenReturn(CompletableFuture.completedFuture(java.util.Optional.of(newest)));
+        Mockito.when(repository.revokeAllForAccount(accountId)).thenReturn(CompletableFuture.completedFuture(null));
+
+        SessionService service = new SessionService(repository, true, 30);
+        service.revokeActiveSessionForPlayer(playerUuid).join();
+
+        Mockito.verify(repository).revokeAllForAccount(accountId);
+        Mockito.verify(repository, Mockito.never()).revoke(Mockito.any());
+    }
+
+    @Test
+    void logoutWithNoActiveSessionDoesNothing() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        UUID playerUuid = UUID.randomUUID();
+        Mockito.when(repository.findActiveByPlayerUuid(playerUuid))
+                .thenReturn(CompletableFuture.completedFuture(java.util.Optional.empty()));
+
+        SessionService service = new SessionService(repository, true, 30);
+        service.revokeActiveSessionForPlayer(playerUuid).join();
+
+        Mockito.verify(repository, Mockito.never()).revokeAllForAccount(Mockito.any());
+        Mockito.verify(repository, Mockito.never()).revoke(Mockito.any());
+    }
+
+    @Test
     void runtimeTimeoutAffectsNewSessionsImmediately() {
         SessionRepository repository = Mockito.mock(SessionRepository.class);
         Mockito.when(repository.save(Mockito.any())).thenReturn(CompletableFuture.completedFuture(null));
