@@ -136,7 +136,8 @@ restrictions:
 
   # Use lowercase command labels including the leading slash. Arguments are not
   # allowed here. This list does not create command aliases. Keep every
-  # registered authentication command players need before login.
+  # registered authentication command players need before login. On Paper,
+  # tab completion before login also offers only these commands.
   allowed-commands:
     - "/login"
     - "/l"

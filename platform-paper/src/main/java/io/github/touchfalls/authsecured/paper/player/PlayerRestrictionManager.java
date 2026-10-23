@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 public class PlayerRestrictionManager {
 
@@ -26,25 +27,33 @@ public class PlayerRestrictionManager {
     private final Map<UUID, Location> initialLocations = new ConcurrentHashMap<>();
     private final Map<UUID, AuthState> playerStates = new ConcurrentHashMap<>();
     private volatile MovementLock movementLock = MovementLock.NONE;
+    private volatile Consumer<UUID> commandListRefresher = playerUuid -> { };
 
     public void setMovementLock(MovementLock movementLock) {
         this.movementLock = movementLock == null ? MovementLock.NONE : movementLock;
     }
 
+    /** Called on the server thread whenever a player gains or loses authentication. */
+    public void setCommandListRefresher(Consumer<UUID> commandListRefresher) {
+        this.commandListRefresher = commandListRefresher == null ? playerUuid -> { } : commandListRefresher;
+    }
+
     public void setPlayerAuthenticated(UUID playerUuid) {
-        authenticatedPlayers.add(playerUuid);
+        boolean changed = authenticatedPlayers.add(playerUuid);
         initialLocations.remove(playerUuid);
         playerStates.put(playerUuid, AuthState.AUTHENTICATED);
         movementLock.unlock(playerUuid);
+        if (changed) commandListRefresher.accept(playerUuid);
     }
 
     public void setPlayerUnauthenticated(UUID playerUuid, Location currentLocation) {
-        authenticatedPlayers.remove(playerUuid);
+        boolean changed = authenticatedPlayers.remove(playerUuid);
         playerStates.put(playerUuid, AuthState.AUTH_REQUIRED);
         if (currentLocation != null) {
             initialLocations.putIfAbsent(playerUuid, currentLocation.clone());
         }
         movementLock.lock(playerUuid);
+        if (changed) commandListRefresher.accept(playerUuid);
     }
 
     /** Temporary password accepted: still restricted, but {@code /changepassword} may finish the login. */
