@@ -54,6 +54,8 @@ messages:
   admin-operation-failed: "&cL'opération a échoué. Consultez le journal du serveur."
   admin-account-unlocked: "&aCompte déverrouillé."
   admin-account-unregistered: "&aEnregistrement du compte supprimé."
+  admin-password-reset-notice: "&cUn administrateur a réinitialisé votre mot de passe. Connectez-vous avec le mot de passe temporaire qui vous a été remis."
+  admin-unregistered-notice: "&cUn administrateur a supprimé votre compte. Inscrivez-vous à nouveau pour continuer."
   admin-account-not-found-or-failed: "&cCompte introuvable ou opération échouée."
   admin-usage: "&e/authadmin <status|doctor|reload|session|audit|unlock|unregister|resetpassword>"
   admin-state-enabled: "activé"
