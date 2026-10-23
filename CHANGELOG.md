@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.3] - 2026-10-23
+
+### Added
+- Fabric support for Minecraft 26.3, mapped to Fabric API 0.164.0+26.3.
+
+### Security
+- `/changepassword` now uses the same checks as `/login`: IP and account rate limits, the
+  failed-attempt counter, account locks and temporary-password expiry. Before login the command
+  is only accepted after a temporary password was accepted; Paper also enforces
+  `restrictions.allowed-commands` for password commands.
+- Fabric blocks pre-login commands sent through the signed-command packet (`/msg`, `/me`, or any
+  command from a modified client) and checks every command again in `Commands.performCommand`.
+  The command injections are now required, so a renamed handler fails loading instead of
+  silently allowing commands.
+- A locked account answers `ACCOUNT_LOCKED` for correct and wrong passwords alike, so the lock no
+  longer confirms a guessed password.
+- The in-memory rate-limit store evicts the soonest-expiring entry at capacity instead of
+  reporting every key as locked.
+- Paper stays fail-closed when startup throws an `Error` or the log filter cannot be installed.
+
+### Fixed
+- PostgreSQL security events are bound as JSONB (`Types.OTHER`) and were previously rejected;
+  plain-text audit metadata is wrapped into JSON.
+- Spigot: the restriction listener used the Paper-only `PlayerAttemptPickupItemEvent` and the
+  temporary-password message used Paper-only Adventure; both now use Bukkit/BungeeCord APIs.
+
+### Changed
+- Current maximum supported Minecraft release is now 26.3.
+- Unauthenticated players cannot move at all: Paper sets walk/fly speed to zero, undoes every
+  position change (including jumps), blocks vehicles, gliding and pearl/portal/spectator
+  teleports; Fabric pulls the client back to its server position and blocks vehicle movement,
+  spectator teleports, creative-slot edits and hand swapping.
+
+## [1.2.2] - 2026-09-16
+
+### Security
+- Removed the public fallback IP hashing key. A private `AUTHSECURED_IP_SECRET` is now required for startup.
+- Unknown IP addresses no longer share a synthetic identity or create IP-bound reconnect sessions.
+- Stored Argon2id cost and output lengths are bounded before verification; malformed hashes produce safe diagnostics.
+- A locked account without a lock expiry remains locked until an administrator resolves it.
+- Unexpected authentication failures log exception types without credential-bearing exception messages.
+- Redis can be marked required, including at runtime; optional fallback is reported as degraded.
+- The in-memory rate-limit store has a hard capacity and amortized expiry cleanup.
+- Discord webhook URLs are restricted to official HTTPS endpoints.
+
+### Reliability and maintenance
+- SQLite enforces foreign keys on every pooled connection and tracks schema version 2.
+- SQLite migration scripts are executed with SQLite's native SQL parser, including triggers and quoted semicolons. Legacy partial schemas recreate missing V1 tables before their version is advanced.
+- Paper and Fabric trigger periodic off-thread cleanup of expired sessions and old audit records.
+- Audit retention and cleanup interval are configurable and validated.
+
+### Packaging
+- Moved project packages to `io.github.touchfalls.authsecured`.
+- Relocated bundled Gson and org.json; retained the original SQLite JNI package.
+- Minimized shaded artifacts while preserving reflective JDBC and Flyway dependencies.
+- Updated vulnerable Bouncy Castle, PostgreSQL JDBC, and Jackson dependencies, plus SQLite, HikariCP, Flyway, Jedis, SnakeYAML, Gson, and org.json.
+- Added Fabric metadata and bytecode consistency tests for exact Minecraft targets.
+
 ## [1.2.1] - 2026-09-15
 
 ### Security

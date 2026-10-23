@@ -3,8 +3,8 @@ plugins {
 }
 
 dependencies {
-    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
-    implementation("org.yaml:snakeyaml:2.2")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
+    implementation("org.yaml:snakeyaml:2.7")
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-engine:5.10.2")

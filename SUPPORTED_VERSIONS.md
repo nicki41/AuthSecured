@@ -1,11 +1,11 @@
 # Supported Minecraft versions
 
 AuthSecured supports dedicated servers from Minecraft 1.21 through the current
-stable release, 26.2.
+stable release, 26.3.
 
 ## Paper-compatible servers
 
-The single `authsecured-paper-1.2.1.jar` artifact is compiled against the
+The single `authsecured-paper-1.2.3.jar` artifact is compiled against the
 lowest supported Paper API (`1.21`) and uses only API calls retained by newer
 Paper, Purpur, Spigot, and Leaf releases.
 
@@ -32,6 +32,7 @@ JAR whose `+mc...` suffix matches the server exactly:
 | 26.1.1 | 0.145.4+26.1.1 |
 | 26.1.2 | 0.155.2+26.1.2 |
 | 26.2 | 0.157.0+26.2 |
+| 26.3 | 0.164.0+26.3 |
 
 Minecraft 1.21.x artifacts target Java 21. Minecraft 26.x artifacts target
 Java 25, matching the corresponding dedicated server requirement.

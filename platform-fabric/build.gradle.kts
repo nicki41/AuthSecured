@@ -27,7 +27,8 @@ val fabricApiVersions = mapOf(
     "26.1" to "0.145.1+26.1",
     "26.1.1" to "0.145.4+26.1.1",
     "26.1.2" to "0.155.2+26.1.2",
-    "26.2" to "0.157.0+26.2"
+    "26.2" to "0.157.0+26.2",
+    "26.3" to "0.164.0+26.3"
 )
 val fabricApiVersion = fabricApiVersions[minecraftVersion]
     ?: error("Unsupported minecraft_version '$minecraftVersion'. See SUPPORTED_VERSIONS.md.")
@@ -107,17 +108,31 @@ tasks.named<ShadowJar>("shadowJar") {
     archiveVersion.set("${project.version}+mc$minecraftVersion")
     archiveClassifier.set(if (minecraftVersion.startsWith("26.")) "" else "dev-shadow")
     mergeServiceFiles()
+    minimize {
+        // JDBC drivers, Flyway providers and serializers use reflection or ServiceLoader.
+        exclude(dependency("org.xerial:sqlite-jdbc:.*"))
+        exclude(dependency("org.postgresql:postgresql:.*"))
+        exclude(dependency("org.flywaydb:.*:.*"))
+        exclude(dependency("com.zaxxer:HikariCP:.*"))
+        exclude(dependency("redis.clients:jedis:.*"))
+        exclude(dependency("org.yaml:snakeyaml:.*"))
+    }
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
     exclude("META-INF/LICENSE*", "META-INF/NOTICE*")
     exclude("org/slf4j/**")
+    exclude("org/checkerframework/**") // Compile-time annotations only.
 
-    relocate("org.bouncycastle", "com.example.authsecured.libs.bouncycastle")
-    relocate("com.zaxxer.hikari", "com.example.authsecured.libs.hikari")
-    relocate("org.postgresql", "com.example.authsecured.libs.postgresql")
-    relocate("org.flywaydb", "com.example.authsecured.libs.flyway")
-    relocate("redis.clients.jedis", "com.example.authsecured.libs.jedis")
-    relocate("org.apache.commons.pool2", "com.example.authsecured.libs.commons.pool2")
-    relocate("org.yaml.snakeyaml", "com.example.authsecured.libs.snakeyaml")
+    relocate("org.bouncycastle", "io.github.touchfalls.authsecured.libs.bouncycastle")
+    relocate("com.zaxxer.hikari", "io.github.touchfalls.authsecured.libs.hikari")
+    relocate("org.postgresql", "io.github.touchfalls.authsecured.libs.postgresql")
+    relocate("org.flywaydb", "io.github.touchfalls.authsecured.libs.flyway")
+    relocate("redis.clients.jedis", "io.github.touchfalls.authsecured.libs.jedis")
+    relocate("org.apache.commons.pool2", "io.github.touchfalls.authsecured.libs.commons.pool2")
+    relocate("org.yaml.snakeyaml", "io.github.touchfalls.authsecured.libs.snakeyaml")
+    relocate("com.google.gson", "io.github.touchfalls.authsecured.libs.gson")
+    relocate("org.json", "io.github.touchfalls.authsecured.libs.json")
+    // sqlite-jdbc must keep org.sqlite: its JNI bridge and native resource lookup
+    // use the original package and break when only bytecode names are relocated.
 }
 
 tasks.jar {
@@ -140,6 +155,7 @@ if (minecraftVersion.startsWith("26.")) {
 
 tasks.test {
     useJUnitPlatform()
+    systemProperty("authsecured.minecraftVersion", minecraftVersion)
 }
 
 val verifySQLiteDriverInShadowJar by tasks.registering {
@@ -148,6 +164,12 @@ val verifySQLiteDriverInShadowJar by tasks.registering {
         val archive = tasks.shadowJar.get().archiveFile.get().asFile
         val nativeDb = zipTree(archive).matching { include("org/sqlite/core/NativeDB.class") }
         check(!nativeDb.isEmpty) { "SQLite NativeDB is missing from ${archive.name}" }
+        check(!zipTree(archive).matching {
+            include("io/github/touchfalls/authsecured/fabric/AuthSecuredFabricMod.class")
+        }.isEmpty) { "Fabric entrypoint is missing from ${archive.name}" }
+        check(zipTree(archive).matching { include("com/google/gson/**", "org/json/**") }.isEmpty) {
+            "Unrelocated JSON libraries remain in ${archive.name}"
+        }
     }
 }
 

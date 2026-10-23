@@ -88,6 +88,9 @@ session:
 redis:
   # Optional shared rate-limit storage. Keep false for the in-memory store.
   enabled: false
+  # Stop startup if Redis is unavailable. Recommended for proxy networks that
+  # require one shared rate limit across several servers.
+  required: false
   # Preferred connection method. Example value: redis://user:password@host:6379
   uri-env: "${ENV:AUTHSECURED_REDIS_URI}"
   # Used only when uri-env resolves to an empty value.
@@ -132,7 +135,8 @@ restrictions:
   block-commands: true         # Block commands not listed below
 
   # Use lowercase command labels including the leading slash. Arguments are not
-  # allowed here. Keep every authentication command players need before login.
+  # allowed here. This list does not create command aliases. Keep every
+  # registered authentication command players need before login.
   allowed-commands:
     - "/login"
     - "/l"
@@ -155,6 +159,10 @@ logging:
   audit:
     # Store security events and authentication attempts in the database.
     enabled: true
+    # Delete audit rows older than this many days. Range: 1..3650.
+    retention-days: 30
+    # Run session and audit cleanup at this interval. Range: 60..86400 seconds.
+    cleanup-interval-seconds: 3600
 
 notifications:
   login-failures:

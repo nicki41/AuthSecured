@@ -1,0 +1,98 @@
+package io.github.touchfalls.authsecured;
+
+import io.github.touchfalls.authsecured.application.SessionService;
+import io.github.touchfalls.authsecured.domain.session.Session;
+import io.github.touchfalls.authsecured.ports.SessionRepository;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class SessionServiceTest {
+
+    @Test
+    void testSessionCreationAndRevocation() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        Mockito.when(repository.save(Mockito.any())).thenReturn(CompletableFuture.completedFuture(null));
+        Mockito.when(repository.revoke(Mockito.any())).thenReturn(CompletableFuture.completedFuture(null));
+
+        SessionService sessionService = new SessionService(repository, true, 30);
+        UUID playerUuid = UUID.randomUUID();
+
+        Session session = sessionService.createSession(1L, playerUuid, "server1").join();
+        assertNotNull(session);
+        assertEquals(playerUuid, session.getPlayerUuid());
+
+        sessionService.revokeSession(session.getId()).join();
+        Mockito.verify(repository).revoke(session.getId());
+    }
+
+    @Test
+    void verifiesIpHashForPersistentSessions() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        UUID playerUuid = UUID.randomUUID();
+        byte[] expectedIpHash = {1, 2, 3};
+        Session session = Session.create(1L, playerUuid, expectedIpHash, "server1", 60);
+        Mockito.when(repository.findActiveByPlayerUuid(playerUuid))
+                .thenReturn(CompletableFuture.completedFuture(java.util.Optional.of(session)));
+
+        SessionService service = new SessionService(repository, true, true, 60, true);
+
+        assertTrue(service.isValidActiveSession(playerUuid, expectedIpHash).join());
+        assertFalse(service.isValidActiveSession(playerUuid, new byte[]{9, 9, 9}).join());
+    }
+
+    @Test
+    void missingIpDoesNotPersistAnIpBoundSession() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        Mockito.when(repository.findActiveByPlayerUuid(Mockito.any()))
+                .thenReturn(CompletableFuture.completedFuture(java.util.Optional.empty()));
+        SessionService service = new SessionService(repository, true, true, 60, true);
+        UUID uuid = UUID.randomUUID();
+        service.createSession(1L, uuid, null, "server").join();
+        assertFalse(service.isValidActiveSession(uuid, null).join());
+        Mockito.verify(repository, Mockito.never()).save(Mockito.any());
+    }
+
+    @Test
+    void nonPersistentSessionsStayInMemory() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        Mockito.when(repository.deleteAll()).thenReturn(CompletableFuture.completedFuture(null));
+        UUID playerUuid = UUID.randomUUID();
+        byte[] ipHash = {4, 5, 6};
+        SessionService service = new SessionService(repository, true, false, 60, true);
+
+        service.createSession(1L, playerUuid, ipHash, "server1").join();
+
+        assertTrue(service.isValidActiveSession(playerUuid, ipHash).join());
+        Mockito.verify(repository).deleteAll();
+        Mockito.verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void disabledSessionsNeverRestore() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        SessionService service = new SessionService(repository, false, true, 60, false);
+
+        assertFalse(service.isValidActiveSession(UUID.randomUUID(), null).join());
+        Mockito.verifyNoInteractions(repository);
+    }
+
+    @Test
+    void runtimeTimeoutAffectsNewSessionsImmediately() {
+        SessionRepository repository = Mockito.mock(SessionRepository.class);
+        Mockito.when(repository.save(Mockito.any())).thenReturn(CompletableFuture.completedFuture(null));
+        SessionService service = new SessionService(repository, true, true, 30, false);
+
+        service.setTimeoutSeconds(120);
+        Session session = service.createSession(1L, UUID.randomUUID(), "server1").join();
+
+        assertEquals(120, service.getTimeoutSeconds());
+        assertEquals(120, java.time.Duration.between(session.getCreatedAt(), session.getExpiresAt()).getSeconds());
+        assertThrows(IllegalArgumentException.class, () -> service.setTimeoutSeconds(0));
+        assertEquals(120, service.getTimeoutSeconds());
+    }
+}

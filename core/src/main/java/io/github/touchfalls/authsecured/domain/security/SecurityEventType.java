@@ -1,0 +1,17 @@
+package io.github.touchfalls.authsecured.domain.security;
+
+public enum SecurityEventType {
+    REGISTER_SUCCESS,
+    REGISTER_FAILURE,
+    LOGIN_SUCCESS,
+    LOGIN_FAILURE,
+    PASSWORD_CHANGE,
+    ACCOUNT_LOCKED,
+    ACCOUNT_UNLOCKED,
+    SESSION_REVOKED,
+    RATE_LIMIT_EXCEEDED,
+    TEMPORARY_PASSWORD_ISSUED,
+    TEMPORARY_PASSWORD_EXPIRED,
+    AUTH_TIMEOUT,
+    ADMIN_ACTION
+}

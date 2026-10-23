@@ -1,0 +1,12 @@
+package io.github.touchfalls.authsecured.ports;
+
+/**
+ * Abstraction for platform-specific logger engines.
+ * Implemented by each platform adapter.
+ */
+public interface PlatformLogger {
+    void info(String message);
+    void warning(String message);
+    void severe(String message);
+    void severe(String message, Throwable throwable);
+}
