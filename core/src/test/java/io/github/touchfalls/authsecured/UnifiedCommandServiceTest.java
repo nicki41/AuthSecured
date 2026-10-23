@@ -103,6 +103,7 @@ class UnifiedCommandServiceTest {
     @DisplayName("Execute logout sets player unauthenticated")
     void testExecuteLogout() {
         UUID playerUuid = UUID.randomUUID();
+        when(restrictionAdapter.isAuthenticated(playerUuid)).thenReturn(true);
         SessionService sessionService = mock(SessionService.class);
         when(authService.getSessionService()).thenReturn(sessionService);
         when(sessionService.revokeActiveSessionForPlayer(playerUuid))
@@ -167,5 +168,46 @@ class UnifiedCommandServiceTest {
 
         verify(restrictionAdapter).setPasswordChangeRequired(playerUuid);
         verify(restrictionAdapter, never()).setPlayerAuthenticated(any());
+    }
+
+    @Test
+    @DisplayName("A login result is dropped if the player reconnected under a new connection meanwhile")
+    void loginResultForAnOldConnectionDoesNotAuthenticateTheNewOne() {
+        UUID playerUuid = UUID.randomUUID();
+        Object oldConnection = new Object();
+        Object newConnection = new Object();
+        when(platform.currentConnectionToken(playerUuid)).thenReturn(oldConnection, newConnection);
+        when(authService.login(eq(playerUuid), eq("TestPlayer"), any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(AuthResult.SUCCESS));
+
+        commandExecutor.executeLogin(playerUuid, "TestPlayer", "secret".toCharArray(), "127.0.0.1").join();
+
+        verify(restrictionAdapter, never()).setPlayerAuthenticated(any());
+        verify(platform, never()).sendMessage(eq(playerUuid), any());
+    }
+
+    @Test
+    @DisplayName("Register is refused when the player is already authenticated")
+    void registerIsRefusedWhenAlreadyAuthenticated() {
+        UUID playerUuid = UUID.randomUUID();
+        when(restrictionAdapter.isAuthenticated(playerUuid)).thenReturn(true);
+
+        commandExecutor.executeRegister(playerUuid, "TestPlayer",
+                "password12".toCharArray(), "password12".toCharArray(), "127.0.0.1").join();
+
+        verify(authService, never()).register(any(), any(), any(), any());
+        verify(platform).sendMessage(eq(playerUuid), anyString());
+    }
+
+    @Test
+    @DisplayName("Logout is a no-op when the player is not authenticated")
+    void logoutIsANoOpWhenNotAuthenticated() {
+        UUID playerUuid = UUID.randomUUID();
+
+        commandExecutor.executeLogout(playerUuid).join();
+
+        verify(authService, never()).getSessionService();
+        verify(restrictionAdapter, never()).setPlayerUnauthenticated(any(), any());
+        verify(platform).sendMessage(eq(playerUuid), anyString());
     }
 }

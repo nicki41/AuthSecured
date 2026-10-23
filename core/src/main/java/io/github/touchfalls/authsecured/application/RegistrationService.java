@@ -72,7 +72,7 @@ public class RegistrationService {
                                             return passwordService.hashPasswordAsync(password)
                                                     .thenCompose(hash -> {
                                                         Account account = Account.createNew(playerUuid, username, normalizedUsername, hash);
-                                                        return accountRepository.save(account)
+                                                        return accountRepository.save(account, ipHash)
                                                                 .thenCompose(savedAccount -> {
                                                                     return securityService.logSecurityEvent(savedAccount.getId(),
                                                                                     SecurityEventType.REGISTER_SUCCESS, ipHash, "{}")

@@ -2,6 +2,9 @@ package io.github.touchfalls.authsecured.infrastructure.security;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -37,9 +40,33 @@ public class IpHashService {
             Mac mac = Mac.getInstance("HmacSHA256");
             SecretKeySpec keySpec = new SecretKeySpec(secretKey, "HmacSHA256");
             mac.init(keySpec);
-            return mac.doFinal(ipAddress.trim().getBytes(StandardCharsets.UTF_8));
+            return mac.doFinal(normalizeForHashing(ipAddress.trim()).getBytes(StandardCharsets.UTF_8));
         } catch (NoSuchAlgorithmException | InvalidKeyException e) {
             throw new IllegalStateException("Failed to compute HMAC-SHA256 for IP address", e);
+        }
+    }
+
+    /**
+     * IPv4 addresses hash unchanged. IPv6 addresses are rounded to their /64
+     * network prefix before hashing: a /64 is the smallest block most ISPs
+     * assign to one customer, so per-address IP rate limits and account/IP
+     * registration caps would otherwise be trivially bypassed by rotating the
+     * low 64 bits. Session IP-binding becomes per-/64 for IPv6 too, which also
+     * tolerates the address rotation (SLAAC privacy addresses) common on IPv6.
+     */
+    private static String normalizeForHashing(String ipAddress) {
+        try {
+            InetAddress address = InetAddress.getByName(ipAddress);
+            if (!(address instanceof Inet6Address)) {
+                // IPv4, including IPv4-mapped IPv6 literals (the JDK unwraps those); canonical
+                // form matches what socket addresses already give, so this changes nothing in practice.
+                return address.getHostAddress();
+            }
+            byte[] prefix = new byte[16];
+            System.arraycopy(address.getAddress(), 0, prefix, 0, 8);
+            return InetAddress.getByAddress(prefix).getHostAddress();
+        } catch (UnknownHostException e) {
+            return ipAddress; // not a literal IP address; hash it as given
         }
     }
 

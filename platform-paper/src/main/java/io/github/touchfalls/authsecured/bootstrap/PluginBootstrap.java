@@ -121,17 +121,17 @@ public class PluginBootstrap {
     }
 
     private void registerCommands() {
-        registerCmd("login", new LoginCommand(container.getAuthService(), restrictionManager, container.getConfigManager(), container.getIpHashService(), container.getAuthenticationTimeoutService(), plugin));
-        registerCmd("register", new RegisterCommand(container.getAuthService(), restrictionManager, container.getConfigManager(), container.getIpHashService(), container.getAuthenticationTimeoutService(), plugin));
-        registerCmd("changepassword", new ChangePasswordCommand(container.getAuthService(), restrictionManager, container.getConfigManager(), container.getIpHashService(), container.getAuthenticationTimeoutService(), plugin));
+        registerCmd("login", new LoginCommand(container.getCommandExecutor(), container.getConfigManager()));
+        registerCmd("register", new RegisterCommand(container.getCommandExecutor(), container.getConfigManager()));
+        registerCmd("changepassword", new ChangePasswordCommand(container.getCommandExecutor(), container.getConfigManager()));
         AuthAdminCommand adminCommand = new AuthAdminCommand(container, plugin);
         registerCmd("authadmin", adminCommand);
         PluginCommand authAdmin = plugin.getCommand("authadmin");
         if (authAdmin != null) {
             authAdmin.setTabCompleter(adminCommand);
         }
-        registerCmd("logout", new LogoutCommand(container.getAuthService(), restrictionManager, container.getConfigManager(), container.getAuthenticationTimeoutService()));
-        registerCmd("authstatus", new AuthStatusCommand(restrictionManager, container.getConfigManager()));
+        registerCmd("logout", new LogoutCommand(container.getCommandExecutor(), container.getConfigManager()));
+        registerCmd("authstatus", new AuthStatusCommand(container.getCommandExecutor(), container.getConfigManager()));
         java.util.Set<String> passwordAliases = new java.util.HashSet<>();
         for (String commandName : java.util.List.of("login", "register", "changepassword")) {
             PluginCommand command = plugin.getCommand(commandName);

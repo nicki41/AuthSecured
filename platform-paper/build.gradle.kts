@@ -51,6 +51,7 @@ tasks.shadowJar {
     relocate("org.yaml.snakeyaml", "io.github.touchfalls.authsecured.libs.snakeyaml")
     relocate("com.google.gson", "io.github.touchfalls.authsecured.libs.gson")
     relocate("org.json", "io.github.touchfalls.authsecured.libs.json")
+    relocate("com.fasterxml.jackson", "io.github.touchfalls.authsecured.libs.jackson")
     // sqlite-jdbc must keep org.sqlite: its JNI bridge and native resource lookup
     // use the original package and break when only bytecode names are relocated.
 }
@@ -64,7 +65,9 @@ val verifySQLiteDriverInShadowJar by tasks.registering {
         check(!zipTree(archive).matching {
             include("io/github/touchfalls/authsecured/AuthSecuredPlugin.class")
         }.isEmpty) { "Paper entrypoint is missing from ${archive.name}" }
-        check(zipTree(archive).matching { include("com/google/gson/**", "org/json/**") }.isEmpty) {
+        check(zipTree(archive).matching {
+            include("com/google/gson/**", "org/json/**", "com/fasterxml/jackson/**")
+        }.isEmpty) {
             "Unrelocated JSON libraries remain in ${archive.name}"
         }
     }

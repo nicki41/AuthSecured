@@ -5,6 +5,7 @@ import io.github.touchfalls.authsecured.ports.RateLimitStore;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -12,6 +13,14 @@ import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class RedisRateLimitStore implements RateLimitStore {
+
+    // INCR and EXPIRE as two separate calls can leave a key with no expiry if the
+    // connection drops in between; that key would then count forever and never
+    // reset. One script makes the increment and the TTL atomic.
+    private static final String INCREMENT_WITH_EXPIRY_SCRIPT =
+            "local count = redis.call('INCR', KEYS[1]) "
+                    + "if count == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end "
+                    + "return count";
 
     private final JedisPool jedisPool;
     private final MemoryRateLimitStore fallbackStore;
@@ -47,11 +56,9 @@ public class RedisRateLimitStore implements RateLimitStore {
         }
         return withFallback(CompletableFuture.supplyAsync(() -> {
             try (Jedis jedis = jedisPool.getResource()) {
-                long count = jedis.incr(key);
-                if (count == 1) {
-                    jedis.expire(key, windowSeconds);
-                }
-                return (int) count;
+                Object result = jedis.eval(INCREMENT_WITH_EXPIRY_SCRIPT,
+                        List.of(key), List.of(Long.toString(windowSeconds)));
+                return ((Number) result).intValue();
             } catch (Exception e) {
                 throw new IllegalStateException("Redis operation failed", e);
             }

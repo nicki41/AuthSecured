@@ -66,12 +66,12 @@ public class PostgresAccountRepository implements AccountRepository {
     }
 
     @Override
-    public CompletableFuture<Account> save(Account account) {
+    public CompletableFuture<Account> save(Account account, byte[] registrationIpHash) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "INSERT INTO accounts (uuid, username, username_normalized, password_hash, status, " +
                     "failed_login_attempts, locked_until, created_at, updated_at, last_login_at, password_changed_at, " +
-                    "password_change_required, temporary_password_expires_at) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id";
+                    "password_change_required, temporary_password_expires_at, registration_ip_hash) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setObject(1, account.getUuid());
@@ -88,6 +88,7 @@ public class PostgresAccountRepository implements AccountRepository {
                 stmt.setBoolean(12, account.isPasswordChangeRequiredFlag());
                 stmt.setTimestamp(13, account.getTemporaryPasswordExpiresAt() != null
                         ? Timestamp.from(account.getTemporaryPasswordExpiresAt()) : null);
+                stmt.setBytes(14, registrationIpHash);
 
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
@@ -112,29 +113,57 @@ public class PostgresAccountRepository implements AccountRepository {
     }
 
     @Override
-    public CompletableFuture<Boolean> update(Account account) {
+    public CompletableFuture<Boolean> updatePasswordHash(Long accountId, String newPasswordHash, Instant now) {
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "UPDATE accounts SET username = ?, password_hash = ?, status = ?, " +
-                    "failed_login_attempts = ?, locked_until = ?, updated_at = ?, last_login_at = ?, " +
-                    "password_changed_at = ?, password_change_required = ?, temporary_password_expires_at = ? WHERE uuid = ?";
+            String sql = "UPDATE accounts SET password_hash = ?, password_changed_at = ?, updated_at = ?, "
+                    + "password_change_required = FALSE, temporary_password_expires_at = NULL WHERE id = ?";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setString(1, account.getUsername());
-                stmt.setString(2, account.getPasswordHash());
-                stmt.setString(3, account.getStatus().name());
-                stmt.setInt(4, account.getFailedLoginAttempts());
-                stmt.setTimestamp(5, account.getLockedUntil() != null ? Timestamp.from(account.getLockedUntil()) : null);
-                stmt.setTimestamp(6, Timestamp.from(account.getUpdatedAt()));
-                stmt.setTimestamp(7, account.getLastLoginAt() != null ? Timestamp.from(account.getLastLoginAt()) : null);
-                stmt.setTimestamp(8, Timestamp.from(account.getPasswordChangedAt()));
-                stmt.setBoolean(9, account.isPasswordChangeRequiredFlag());
-                stmt.setTimestamp(10, account.getTemporaryPasswordExpiresAt() != null
-                        ? Timestamp.from(account.getTemporaryPasswordExpiresAt()) : null);
-                stmt.setObject(11, account.getUuid());
-
+                Timestamp nowTs = Timestamp.from(now);
+                stmt.setString(1, newPasswordHash);
+                stmt.setTimestamp(2, nowTs);
+                stmt.setTimestamp(3, nowTs);
+                stmt.setLong(4, accountId);
                 return stmt.executeUpdate() > 0;
             } catch (SQLException e) {
-                throw new RuntimeException("Error updating account", e);
+                throw new RuntimeException("Error updating password hash", e);
+            }
+        }, executor);
+    }
+
+    @Override
+    public CompletableFuture<Boolean> unlock(Long accountId, Instant now) {
+        return CompletableFuture.supplyAsync(() -> {
+            String sql = "UPDATE accounts SET status = 'ACTIVE', locked_until = NULL, "
+                    + "failed_login_attempts = 0, updated_at = ? WHERE id = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setTimestamp(1, Timestamp.from(now));
+                stmt.setLong(2, accountId);
+                return stmt.executeUpdate() > 0;
+            } catch (SQLException e) {
+                throw new RuntimeException("Error unlocking account", e);
+            }
+        }, executor);
+    }
+
+    @Override
+    public CompletableFuture<Boolean> setTemporaryPassword(Long accountId, String passwordHash, Instant expiresAt, Instant now) {
+        return CompletableFuture.supplyAsync(() -> {
+            String sql = "UPDATE accounts SET password_hash = ?, password_change_required = TRUE, "
+                    + "temporary_password_expires_at = ?, password_changed_at = ?, updated_at = ?, "
+                    + "status = 'ACTIVE', locked_until = NULL, failed_login_attempts = 0 WHERE id = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sql)) {
+                Timestamp nowTs = Timestamp.from(now);
+                stmt.setString(1, passwordHash);
+                stmt.setTimestamp(2, Timestamp.from(expiresAt));
+                stmt.setTimestamp(3, nowTs);
+                stmt.setTimestamp(4, nowTs);
+                stmt.setLong(5, accountId);
+                return stmt.executeUpdate() > 0;
+            } catch (SQLException e) {
+                throw new RuntimeException("Error setting temporary password", e);
             }
         }, executor);
     }
@@ -143,19 +172,29 @@ public class PostgresAccountRepository implements AccountRepository {
     public CompletableFuture<Boolean> incrementFailedAttemptsAtomic(Long accountId, int maxAttempts,
                                                                      long lockDurationSeconds, Instant now) {
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "UPDATE accounts SET failed_login_attempts = failed_login_attempts + 1, "
-                    + "status = CASE WHEN failed_login_attempts + 1 >= ? AND status <> 'SUSPENDED' "
-                    + "THEN 'LOCKED' ELSE status END, "
-                    + "locked_until = CASE WHEN failed_login_attempts + 1 >= ? AND status <> 'SUSPENDED' "
-                    + "THEN ? ELSE locked_until END, "
+            // An expired lock resets the counter to 1 instead of adding to the stale count:
+            // otherwise one more failure after the lock expires immediately re-locks the account.
+            String resetIfLockExpired = "(CASE WHEN status = 'LOCKED' AND locked_until <= ? "
+                    + "THEN 1 ELSE failed_login_attempts + 1 END)";
+            String sql = "UPDATE accounts SET "
+                    + "failed_login_attempts = " + resetIfLockExpired + ", "
+                    + "status = CASE WHEN status = 'SUSPENDED' THEN status "
+                    + "WHEN " + resetIfLockExpired + " >= ? THEN 'LOCKED' "
+                    + "WHEN status = 'LOCKED' THEN 'ACTIVE' ELSE status END, "
+                    + "locked_until = CASE WHEN status = 'SUSPENDED' THEN locked_until "
+                    + "WHEN " + resetIfLockExpired + " >= ? THEN ? ELSE NULL END, "
                     + "updated_at = ? WHERE id = ?";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setInt(1, maxAttempts);
-                stmt.setInt(2, maxAttempts);
-                stmt.setTimestamp(3, Timestamp.from(now.plusSeconds(lockDurationSeconds)));
-                stmt.setTimestamp(4, Timestamp.from(now));
-                stmt.setLong(5, accountId);
+                Timestamp nowTs = Timestamp.from(now);
+                stmt.setTimestamp(1, nowTs);
+                stmt.setTimestamp(2, nowTs);
+                stmt.setInt(3, maxAttempts);
+                stmt.setTimestamp(4, nowTs);
+                stmt.setInt(5, maxAttempts);
+                stmt.setTimestamp(6, Timestamp.from(now.plusSeconds(lockDurationSeconds)));
+                stmt.setTimestamp(7, nowTs);
+                stmt.setLong(8, accountId);
                 return stmt.executeUpdate() > 0;
             } catch (SQLException e) {
                 throw new RuntimeException("Error atomically incrementing failed attempts", e);
@@ -201,7 +240,9 @@ public class PostgresAccountRepository implements AccountRepository {
             return CompletableFuture.completedFuture(0L);
         }
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "SELECT COUNT(DISTINCT account_id) FROM security_events WHERE ip_hash = ? AND event_type = 'REGISTER_SUCCESS'";
+            // Counts the accounts table directly so the cap survives disabled audit
+            // logging and audit retention, instead of depending on security_events rows.
+            String sql = "SELECT COUNT(*) FROM accounts WHERE registration_ip_hash = ?";
             try (Connection conn = dataSource.getConnection();
                  PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setBytes(1, ipHash);

@@ -18,6 +18,22 @@ class MemoryRateLimitStoreCapacityTest {
     }
 
     @Test
+    void floodingWithFakeKeysCannotWipeAVictimWithRealFailures() {
+        MemoryRateLimitStore store = new MemoryRateLimitStore(3);
+        // "victim" already failed twice; its count (2) is higher than any single new key (1).
+        store.incrementAndGet("victim", 600).join();
+        store.incrementAndGet("victim", 600).join();
+        store.incrementAndGet("filler", 600).join();
+
+        // An attacker floods the table with one-shot fake keys; they evict each other, not "victim".
+        for (int i = 0; i < 50; i++) {
+            store.incrementAndGet("attacker-" + i, 600).join();
+        }
+
+        assertEquals(3, store.incrementAndGet("victim", 600).join());
+    }
+
+    @Test
     void fullLockTableDoesNotLockUnrelatedKeys() {
         MemoryRateLimitStore store = new MemoryRateLimitStore(2);
         store.setLock("a", 600).join();

@@ -55,7 +55,7 @@ class DatabaseSessionRepositoryTest {
         UUID playerUuid = UUID.randomUUID();
         Long accountId = new SqliteAccountRepository(databaseManager.getDataSource(),
                 databaseManager.getDbExecutor()).save(Account.createNew(
-                playerUuid, "SessionUser", "sessionuser", "hash")).join().getId();
+                playerUuid, "SessionUser", "sessionuser", "hash"), null).join().getId();
         Session session = Session.create(accountId, playerUuid, "server-1", 1800);
 
         // Save session
@@ -80,7 +80,7 @@ class DatabaseSessionRepositoryTest {
         UUID playerUuid = UUID.randomUUID();
         Long accountId = new SqliteAccountRepository(databaseManager.getDataSource(),
                 databaseManager.getDbExecutor()).save(Account.createNew(
-                playerUuid, "ExpiredUser", "expireduser", "hash")).join().getId();
+                playerUuid, "ExpiredUser", "expireduser", "hash"), null).join().getId();
         repository.save(new Session(UUID.randomUUID(), accountId, playerUuid, null, "server",
                 Instant.now().minusSeconds(120), Instant.now().minusSeconds(60), null)).join();
         repository.deleteExpired().join();

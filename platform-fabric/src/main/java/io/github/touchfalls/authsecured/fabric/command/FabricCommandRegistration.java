@@ -37,42 +37,56 @@ public final class FabricCommandRegistration {
 
     private static void registerPlayerCommands(CommandDispatcher<CommandSourceStack> dispatcher,
                                                AuthSecuredFabricMod mod) {
+        // Brigadier's unquoted StringArgumentType.string() only accepts [0-9A-Za-z_.+-], so a
+        // password with any other character would need client-side quoting Paper never requires.
+        // greedyString() has no such restriction; splitTokens() then reproduces Paper's own
+        // args[0]/args[1] parsing (first token, next token, anything further silently ignored)
+        // so a password typed the same way behaves the same way on both platforms.
         dispatcher.register(Commands.literal("register")
-                .then(Commands.argument("password", StringArgumentType.string())
-                        .then(Commands.argument("confirmPassword", StringArgumentType.string())
-                                .executes(context -> {
-                                    ServerPlayer player = context.getSource().getPlayerOrException();
-                                    if (!ready(mod, player)) return 0;
-                                    executor(mod).executeRegister(player.getUUID(), player.getName().getString(),
-                                            StringArgumentType.getString(context, "password").toCharArray(),
-                                            StringArgumentType.getString(context, "confirmPassword").toCharArray(),
-                                            mod.getPlayerAddress(player.getUUID()));
-                                    return 1;
-                                }))));
+                .then(Commands.argument("passwords", StringArgumentType.greedyString())
+                        .executes(context -> {
+                            ServerPlayer player = context.getSource().getPlayerOrException();
+                            if (!ready(mod, player)) return 0;
+                            String[] parts = splitTokens(StringArgumentType.getString(context, "passwords"));
+                            if (parts == null) {
+                                send(context.getSource(), message(mod, "messages.register-usage",
+                                        "§cUsage: /register <password> <confirmPassword>"));
+                                return 0;
+                            }
+                            executor(mod).executeRegister(player.getUUID(), player.getName().getString(),
+                                    parts[0].toCharArray(), parts[1].toCharArray(),
+                                    mod.getPlayerAddress(player.getUUID()));
+                            return 1;
+                        })));
         dispatcher.register(Commands.literal("reg").redirect(dispatcher.getRoot().getChild("register")));
 
         dispatcher.register(Commands.literal("login")
-                .then(Commands.argument("password", StringArgumentType.string()).executes(context -> {
+                .then(Commands.argument("password", StringArgumentType.greedyString()).executes(context -> {
                     ServerPlayer player = context.getSource().getPlayerOrException();
                     if (!ready(mod, player)) return 0;
                     executor(mod).executeLogin(player.getUUID(), player.getName().getString(),
-                            StringArgumentType.getString(context, "password").toCharArray(),
+                            firstToken(StringArgumentType.getString(context, "password")).toCharArray(),
                             mod.getPlayerAddress(player.getUUID()));
                     return 1;
                 })));
         dispatcher.register(Commands.literal("l").redirect(dispatcher.getRoot().getChild("login")));
 
         dispatcher.register(Commands.literal("changepassword")
-                .then(Commands.argument("oldPassword", StringArgumentType.string())
-                        .then(Commands.argument("newPassword", StringArgumentType.string()).executes(context -> {
+                .then(Commands.argument("passwords", StringArgumentType.greedyString())
+                        .executes(context -> {
                             ServerPlayer player = context.getSource().getPlayerOrException();
                             if (!ready(mod, player)) return 0;
+                            String[] parts = splitTokens(StringArgumentType.getString(context, "passwords"));
+                            if (parts == null) {
+                                send(context.getSource(), message(mod, "messages.changepass-usage",
+                                        "§cUsage: /changepassword <oldPassword> <newPassword>"));
+                                return 0;
+                            }
                             executor(mod).executeChangePassword(player.getUUID(), player.getName().getString(),
-                                    StringArgumentType.getString(context, "oldPassword").toCharArray(),
-                                    StringArgumentType.getString(context, "newPassword").toCharArray(),
+                                    parts[0].toCharArray(), parts[1].toCharArray(),
                                     mod.getPlayerAddress(player.getUUID()));
                             return 1;
-                        }))));
+                        })));
         dispatcher.register(Commands.literal("cp").redirect(dispatcher.getRoot().getChild("changepassword")));
 
         dispatcher.register(Commands.literal("logout").executes(context -> {
@@ -166,6 +180,14 @@ public final class FabricCommandRegistration {
         root.then(Commands.literal("resetpassword")
                 .requires(source -> permitted(mod, source, "resetpassword", 4))
                 .then(playerArgument("player").executes(context -> {
+                    if (!context.getSource().isPlayer()) {
+                        // The console and RCON responses are written to the server log;
+                        // only an in-game sender can receive the password without logging it.
+                        send(context.getSource(), message(mod, "messages.admin-reset-console-blocked",
+                                "&cRun this command in-game. The console and RCON cannot receive "
+                                        + "the password without writing it to the server log."));
+                        return 1;
+                    }
                     String player = StringArgumentType.getString(context, "player");
                     operations(mod).issueTemporaryPassword(player).whenComplete((reset, error) ->
                             context.getSource().getServer().execute(() -> deliverTemporaryPassword(
@@ -254,6 +276,34 @@ public final class FabricCommandRegistration {
 
     private static UnifiedCommandExecutor executor(AuthSecuredFabricMod mod) {
         return mod.getContainer().getCommandExecutor();
+    }
+
+    /** The first whitespace-delimited token, matching how Paper's args[0] is produced. */
+    static String firstToken(String rest) {
+        String trimmed = rest.strip();
+        int space = indexOfWhitespace(trimmed);
+        return space < 0 ? trimmed : trimmed.substring(0, space);
+    }
+
+    /**
+     * Splits a greedy capture into exactly two whitespace-delimited tokens, the way Paper's
+     * command framework already splits a whole command into {@code args[0]}/{@code args[1]}:
+     * anything beyond the second token is silently ignored, just as Paper ignores {@code args[2+]}.
+     * Null if there is no second token.
+     */
+    static String[] splitTokens(String rest) {
+        String first = firstToken(rest);
+        if (first.isEmpty()) return null;
+        String remainder = rest.strip().substring(first.length()).strip();
+        String second = firstToken(remainder);
+        return second.isEmpty() ? null : new String[]{first, second};
+    }
+
+    private static int indexOfWhitespace(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (Character.isWhitespace(value.charAt(i))) return i;
+        }
+        return -1;
     }
 
     private static boolean ready(AuthSecuredFabricMod mod, ServerPlayer player) {

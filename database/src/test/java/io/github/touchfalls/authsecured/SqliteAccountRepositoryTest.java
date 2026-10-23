@@ -63,7 +63,7 @@ class SqliteAccountRepositoryTest {
         UUID uuid = UUID.randomUUID();
         Account account = Account.createNew(uuid, "TestUser", "testuser", "$argon2id$dummyhash");
 
-        Account saved = repository.save(account).join();
+        Account saved = repository.save(account, null).join();
         assertNotNull(saved.getId());
 
         Optional<Account> found = repository.findByUuid(uuid).join();
@@ -79,7 +79,7 @@ class SqliteAccountRepositoryTest {
         Instant expiry = Instant.now().plusSeconds(900);
         account.setTemporaryPassword("$argon2id$temporary", expiry);
 
-        repository.save(account).join();
+        repository.save(account, null).join();
         Account restored = repository.findByUuid(uuid).join().orElseThrow();
 
         assertTrue(restored.isPasswordChangeRequired());
@@ -88,12 +88,12 @@ class SqliteAccountRepositoryTest {
 
     @Test
     void rejectsDuplicateUsernameWithSpecificException() {
-        repository.save(Account.createNew(UUID.randomUUID(), "Player", "player", "hash")).join();
+        repository.save(Account.createNew(UUID.randomUUID(), "Player", "player", "hash"), null).join();
 
         java.util.concurrent.CompletionException error = assertThrows(
                 java.util.concurrent.CompletionException.class,
                 () -> repository.save(Account.createNew(
-                        UUID.randomUUID(), "PLAYER", "player", "hash")).join());
+                        UUID.randomUUID(), "PLAYER", "player", "hash"), null).join());
 
         assertTrue(error.getCause() instanceof DuplicateAccountException);
     }
@@ -101,7 +101,7 @@ class SqliteAccountRepositoryTest {
     @Test
     void failedAttemptsAreUpdatedAtomically() {
         Account saved = repository.save(Account.createNew(
-                UUID.randomUUID(), "AtomicUser", "atomicuser", "hash")).join();
+                UUID.randomUUID(), "AtomicUser", "atomicuser", "hash"), null).join();
         Instant now = Instant.now();
         java.util.List<java.util.concurrent.CompletableFuture<Boolean>> updates =
                 java.util.stream.IntStream.range(0, 20)
@@ -114,6 +114,41 @@ class SqliteAccountRepositoryTest {
         assertEquals(20, updated.getFailedLoginAttempts());
         assertTrue(repository.resetFailedAttemptsAtomic(saved.getId(), now.plusSeconds(1)).join());
         assertEquals(0, repository.findByUuid(saved.getUuid()).join().orElseThrow().getFailedLoginAttempts());
+    }
+
+    @Test
+    void failureAfterLockExpiryResetsTheCounterInsteadOfRelocking() {
+        Account saved = repository.save(Account.createNew(
+                UUID.randomUUID(), "LockedUser", "lockeduser", "hash"), null).join();
+        Instant now = Instant.now();
+        // 5 failures reach maxAttempts=5 and lock the account until now+900s.
+        for (int i = 0; i < 5; i++) {
+            repository.incrementFailedAttemptsAtomic(saved.getId(), 5, 900, now).join();
+        }
+        Account locked = repository.findByUuid(saved.getUuid()).join().orElseThrow();
+        assertEquals(5, locked.getFailedLoginAttempts());
+        assertTrue(locked.isLocked(now));
+
+        // After the lock has expired, one more wrong guess must not re-lock the account
+        // by counting from the stale total of 5; it should start a fresh count of 1.
+        Instant afterExpiry = now.plusSeconds(1000);
+        repository.incrementFailedAttemptsAtomic(saved.getId(), 5, 900, afterExpiry).join();
+
+        Account afterOneMoreFailure = repository.findByUuid(saved.getUuid()).join().orElseThrow();
+        assertEquals(1, afterOneMoreFailure.getFailedLoginAttempts());
+        assertTrue(!afterOneMoreFailure.isLocked(afterExpiry.plusSeconds(1)),
+                "a single failure right after lock expiry must not immediately re-lock the account");
+    }
+
+    @Test
+    void countAccountsByIpHashWorksWithoutAnyAuditEvents() {
+        byte[] ipHash = {1, 2, 3};
+        repository.save(Account.createNew(UUID.randomUUID(), "First", "first", "hash"), ipHash).join();
+        repository.save(Account.createNew(UUID.randomUUID(), "Second", "second", "hash"), ipHash).join();
+        repository.save(Account.createNew(UUID.randomUUID(), "Other", "other", "hash"), new byte[]{9}).join();
+
+        // No security_events rows were written at all: the cap must still count from accounts.
+        assertEquals(2L, repository.countAccountsByIpHash(ipHash).join());
     }
 
     @Test
@@ -135,10 +170,14 @@ class SqliteAccountRepositoryTest {
              ResultSet columns = connection.getMetaData().getColumns(
                      null, null, "accounts", "password_change_required")) {
             assertTrue(columns.next());
+            try (ResultSet ipColumn = connection.getMetaData().getColumns(
+                    null, null, "accounts", "registration_ip_hash")) {
+                assertTrue(ipColumn.next());
+            }
             try (Statement statement = connection.createStatement();
                  ResultSet version = statement.executeQuery("SELECT version FROM authsecured_schema_version")) {
                 assertTrue(version.next());
-                assertEquals(2, version.getInt(1));
+                assertEquals(3, version.getInt(1));
             }
             try (Statement statement = connection.createStatement();
                  ResultSet table = statement.executeQuery(
@@ -153,7 +192,7 @@ class SqliteAccountRepositoryTest {
     @Test
     void returnsRecentPrivacySafeAuditEntries() {
         Account saved = repository.save(Account.createNew(
-                UUID.randomUUID(), "AuditUser", "audituser", "$argon2id$dummyhash")).join();
+                UUID.randomUUID(), "AuditUser", "audituser", "$argon2id$dummyhash"), null).join();
         DatabaseAuditRepository audit = new DatabaseAuditRepository(
                 databaseManager.getDataSource(), databaseManager.getDbExecutor(), false, LOGGER);
         audit.recordLoginAttempt(new LoginAttempt(
@@ -174,7 +213,7 @@ class SqliteAccountRepositoryTest {
     @Test
     void deletingAccountCascadesToSessionOnEveryPooledConnection() throws Exception {
         UUID uuid = UUID.randomUUID();
-        Account account = repository.save(Account.createNew(uuid, "CascadeUser", "cascadeuser", "hash")).join();
+        Account account = repository.save(Account.createNew(uuid, "CascadeUser", "cascadeuser", "hash"), null).join();
         DatabaseSessionRepository sessions = new DatabaseSessionRepository(
                 databaseManager.getDataSource(), databaseManager.getDbExecutor(), false);
         sessions.save(Session.create(account.getId(), uuid, "server", 1800)).join();

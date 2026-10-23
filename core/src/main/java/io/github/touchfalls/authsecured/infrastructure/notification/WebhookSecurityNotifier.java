@@ -47,12 +47,14 @@ public final class WebhookSecurityNotifier implements SecurityNotifier {
             String safeReason = sanitize(reason, 48);
             String key = safeUsername.toLowerCase(java.util.Locale.ROOT);
             Instant now = Instant.now();
-            if (lastNotification.size() >= MAX_COOLDOWN_ENTRIES) {
+            if (lastNotification.size() >= MAX_COOLDOWN_ENTRIES && !lastNotification.containsKey(key)) {
                 lastNotification.entrySet().removeIf(entry ->
                         entry.getValue().plusSeconds(cooldownSeconds).isBefore(now));
-                if (lastNotification.size() >= MAX_COOLDOWN_ENTRIES && !lastNotification.containsKey(key)) {
-                    return;
-                }
+            }
+            // Evict the oldest entry rather than refusing new ones: an attacker rotating
+            // through many fake names must not permanently silence alerts for real players.
+            if (lastNotification.size() >= MAX_COOLDOWN_ENTRIES && !lastNotification.containsKey(key)) {
+                evictOldest();
             }
             Instant previous = lastNotification.putIfAbsent(key, now);
             if (previous != null && previous.plusSeconds(cooldownSeconds).isAfter(now)) {
@@ -100,6 +102,18 @@ public final class WebhookSecurityNotifier implements SecurityNotifier {
     static String sanitize(String value, int maximumLength) {
         String safeValue = value == null ? "unknown" : value.replaceAll("[^A-Za-z0-9_.:-]", "_");
         return safeValue.substring(0, Math.min(maximumLength, safeValue.length()));
+    }
+
+    private void evictOldest() {
+        String oldest = null;
+        Instant oldestTime = null;
+        for (Map.Entry<String, Instant> entry : lastNotification.entrySet()) {
+            if (oldestTime == null || entry.getValue().isBefore(oldestTime)) {
+                oldestTime = entry.getValue();
+                oldest = entry.getKey();
+            }
+        }
+        if (oldest != null) lastNotification.remove(oldest);
     }
 
     private static String safe(String value) { return value == null ? "" : value.trim(); }

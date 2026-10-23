@@ -64,7 +64,15 @@ public final class DatabaseManager {
         }
 
         this.dataSource = new HikariDataSource(config);
-        runMigrations();
+        try {
+            runMigrations();
+        } catch (RuntimeException exception) {
+            // Nothing holds a reference to this half-constructed DatabaseManager once the
+            // constructor throws, so without this the pool's connections stay open forever.
+            dataSource.close();
+            dbExecutor.shutdownNow();
+            throw exception;
+        }
     }
 
     private String normalizeSslMode(String sslMode) {
@@ -89,7 +97,7 @@ public final class DatabaseManager {
             } else {
                 try (Connection conn = dataSource.getConnection()) {
                     migrateSqlite(conn);
-                    logger.info("SQLite database schema is at version 2.");
+                    logger.info("SQLite database schema is at version 3.");
                 }
             }
         } catch (Exception e) {
@@ -119,7 +127,12 @@ public final class DatabaseManager {
             if (version == 1) {
                 applyAccountSecurityColumnsSqlite(connection);
                 setSchemaVersion(connection, 2);
-            } else if (version > 2) {
+                version = 2;
+            }
+            if (version == 2) {
+                applyRegistrationIpHashColumnSqlite(connection);
+                setSchemaVersion(connection, 3);
+            } else if (version > 3) {
                 throw new IllegalStateException("SQLite schema is newer than this AuthSecured version");
             }
             connection.commit();
@@ -158,6 +171,31 @@ public final class DatabaseManager {
             try (Statement statement = connection.createStatement()) {
                 statement.execute("ALTER TABLE accounts ADD COLUMN temporary_password_expires_at TEXT NULL");
             }
+        }
+    }
+
+    /** Lets the per-IP registration cap survive disabled audit logging or audit retention. */
+    private void applyRegistrationIpHashColumnSqlite(Connection connection) throws Exception {
+        if (!hasColumn(connection, "accounts", "registration_ip_hash")) {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("ALTER TABLE accounts ADD COLUMN registration_ip_hash BLOB NULL");
+            }
+        }
+        // Best-effort backfill from existing audit history; rows with no matching event
+        // (audit disabled, or purged by retention) stay NULL and no longer count toward
+        // security.registration.max-accounts-per-ip until the account registers again.
+        try (Statement statement = connection.createStatement()) {
+            statement.execute(
+                    "UPDATE accounts SET registration_ip_hash = ("
+                            + "SELECT ip_hash FROM security_events "
+                            + "WHERE security_events.account_id = accounts.id "
+                            + "AND event_type = 'REGISTER_SUCCESS' AND ip_hash IS NOT NULL "
+                            + "ORDER BY created_at ASC LIMIT 1) "
+                            + "WHERE registration_ip_hash IS NULL");
+        }
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("CREATE INDEX IF NOT EXISTS idx_accounts_registration_ip_hash "
+                    + "ON accounts(registration_ip_hash)");
         }
     }
 

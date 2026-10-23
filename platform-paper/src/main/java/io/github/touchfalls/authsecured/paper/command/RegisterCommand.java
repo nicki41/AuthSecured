@@ -1,38 +1,24 @@
 package io.github.touchfalls.authsecured.paper.command;
 
-import io.github.touchfalls.authsecured.application.AuthService;
-import io.github.touchfalls.authsecured.application.AuthenticationTimeoutService;
 import io.github.touchfalls.authsecured.infrastructure.config.ConfigManager;
-import io.github.touchfalls.authsecured.infrastructure.security.IpHashService;
-import io.github.touchfalls.authsecured.paper.player.PlayerRestrictionManager;
-import org.bukkit.Bukkit;
+import io.github.touchfalls.authsecured.ports.UnifiedCommandExecutor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
 
-import java.util.Arrays;
-import java.util.UUID;
-
+/**
+ * Parses {@code /register}'s arguments; all authentication logic, state changes
+ * and messaging live in {@link UnifiedCommandExecutor}, shared with Fabric.
+ */
 public class RegisterCommand implements CommandExecutor {
 
-    private final AuthService authService;
-    private final PlayerRestrictionManager restrictionManager;
+    private final UnifiedCommandExecutor commandExecutor;
     private final ConfigManager configManager;
-    private final IpHashService ipHashService;
-    private final AuthenticationTimeoutService authenticationTimeoutService;
-    private final Plugin plugin;
 
-    public RegisterCommand(AuthService authService, PlayerRestrictionManager restrictionManager,
-                           ConfigManager configManager, IpHashService ipHashService,
-                           AuthenticationTimeoutService authenticationTimeoutService, Plugin plugin) {
-        this.authService = authService;
-        this.restrictionManager = restrictionManager;
+    public RegisterCommand(UnifiedCommandExecutor commandExecutor, ConfigManager configManager) {
+        this.commandExecutor = commandExecutor;
         this.configManager = configManager;
-        this.ipHashService = ipHashService;
-        this.authenticationTimeoutService = authenticationTimeoutService;
-        this.plugin = plugin;
     }
 
     @Override
@@ -42,60 +28,16 @@ public class RegisterCommand implements CommandExecutor {
                     "messages.only-players", "&cOnly players can use this command."));
             return true;
         }
-
-        UUID uuid = player.getUniqueId();
-        if (restrictionManager.isAuthenticated(uuid)) {
-            player.sendMessage(configManager.getMessage("messages.already-authenticated", "&cYou are already authenticated!"));
-            return true;
-        }
-
         if (args.length < 2) {
-            player.sendMessage(configManager.getMessage("messages.register-usage", "&cUsage: /register <password> <confirmPassword>"));
+            player.sendMessage(configManager.getMessage(
+                    "messages.register-usage", "&cUsage: /register <password> <confirmPassword>"));
             return true;
         }
 
-        if (!args[0].equals(args[1])) {
-            player.sendMessage(configManager.getMessage("messages.passwords-dont-match", "&cPasswords do not match!"));
-            return true;
-        }
-
-        char[] password = args[0].toCharArray();
-        String ipStr = (player.getAddress() != null && player.getAddress().getAddress() != null)
-                ? player.getAddress().getAddress().getHostAddress()
-                : null;
-        byte[] ipHash = ipHashService.hashIp(ipStr);
-
-        authService.register(uuid, player.getName(), password, ipHash).thenAccept(result -> {
-            Arrays.fill(password, ' ');
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) return;
-                switch (result) {
-                    case SUCCESS -> {
-                        restrictionManager.setPlayerAuthenticated(uuid);
-                        authenticationTimeoutService.clear(uuid);
-                        player.sendMessage(configManager.getMessage("messages.register-success", "&aSuccessfully registered and logged in!"));
-                    }
-                    case ALREADY_REGISTERED ->
-                            player.sendMessage(configManager.getMessage("messages.already-registered", "&cAccount or username already registered."));
-                    case VALIDATION_FAILED ->
-                            player.sendMessage(configManager.getMessage("messages.password-policy-failed", "&cPassword does not meet length/complexity policy."));
-                    case RATE_LIMITED ->
-                            player.sendMessage(configManager.getMessage("messages.rate-limited", "&cRegistration rate limit reached for this IP."));
-                    default ->
-                            player.sendMessage(configManager.getMessage("messages.error", "&cAn internal error occurred."));
-                }
-            });
-        }).exceptionally(ex -> {
-            Arrays.fill(password, ' ');
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (player.isOnline()) {
-                    player.sendMessage(configManager.getMessage("messages.error", "&cAn internal error occurred."));
-                }
-            });
-            plugin.getLogger().severe("Registration processing failed for " + player.getName() + ".");
-            return null;
-        });
-
+        String ipAddress = (player.getAddress() != null && player.getAddress().getAddress() != null)
+                ? player.getAddress().getAddress().getHostAddress() : null;
+        commandExecutor.executeRegister(player.getUniqueId(), player.getName(),
+                args[0].toCharArray(), args[1].toCharArray(), ipAddress);
         return true;
     }
 }

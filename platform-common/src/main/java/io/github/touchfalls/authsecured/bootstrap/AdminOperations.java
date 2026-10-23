@@ -83,9 +83,17 @@ public final class AdminOperations {
             addCheck(lines, !"memory-fallback".equals(container.getRateLimitBackend()),
                     message("messages.admin-doctor-redis-ok", "Rate-limit backend"),
                     message("messages.admin-doctor-redis-fail", "Redis is unavailable; limits are local only"));
-            addCheck(lines, container.isIpHashSecretConfigured(),
+            // A file-generated secret is unique per server; a network sharing one database or
+            // Redis instance needs the same AUTHSECURED_IP_SECRET on every server, or IP-bound
+            // sessions, IP rate limits and the per-IP registration cap silently stop matching
+            // across servers.
+            boolean sharedBackend = container.getConfigManager().getBoolean("redis.enabled", false)
+                    || "postgresql".equals(container.getDatabaseManager().getDatabaseType());
+            addCheck(lines, container.isIpHashSecretFromEnvironment() || !sharedBackend,
                     message("messages.admin-doctor-ip-secret-ok", "IP hashing secret"),
-                    message("messages.admin-doctor-ip-secret-fail", "AUTHSECURED_IP_SECRET is missing"));
+                    message("messages.admin-doctor-ip-secret-fail",
+                            "IP hashing secret comes from a per-server file, but a shared database or "
+                                    + "Redis is enabled. Set the same AUTHSECURED_IP_SECRET on every server."));
             boolean notificationEnabled = container.getConfigManager().getBoolean(
                     "notifications.login-failures.enabled", false);
             boolean discordTarget = container.getConfigManager().getBoolean(

@@ -54,12 +54,6 @@ public class AuthService {
         return loginService.login(playerUuid, username, password, ipHash);
     }
 
-    /** @deprecated Supply the player name so account rate limits use the same key as {@code /login}. */
-    @Deprecated
-    public CompletableFuture<AuthResult> changePassword(UUID playerUuid, char[] oldPassword, char[] newPassword, byte[] ipHash) {
-        return changePassword(playerUuid, null, oldPassword, newPassword, ipHash);
-    }
-
     /**
      * Changes the password after the old one passes the same checks as {@code /login}:
      * rate limits, failed-attempt counter, account lock and temporary-password expiry.
@@ -88,8 +82,10 @@ public class AuthService {
                     return passwordService.hashPasswordAsync(newPassword)
                             .thenCompose(newHash -> {
                                 Instant now = Instant.now();
-                                account.updatePassword(newHash, now);
-                                return accountRepository.update(account)
+                                // A narrow write touches only the password columns, so it cannot
+                                // undo a failed-attempt counter or lock written concurrently by a
+                                // slow Argon2 hashing step elsewhere (see finding #4 of the audit).
+                                return accountRepository.updatePasswordHash(account.getId(), newHash, now)
                                         .thenCompose(updated -> updated
                                                 ? loginService.recordSuccessfulAuthentication(
                                                         account, check.usernameNormalized(), now)
@@ -125,12 +121,12 @@ public class AuthService {
                     Account account = optAccount.get();
                     return passwordService.hashPasswordAsync(temporaryPassword)
                             .thenCompose(hash -> {
-                                account.setTemporaryPassword(hash, expiresAt);
-                                account.unlock();
-                                return accountRepository.update(account)
+                                return accountRepository.setTemporaryPassword(
+                                                account.getId(), hash, expiresAt, Instant.now())
                                         .thenCompose(updated -> updated
                                                 ? sessionService.revokeAllSessionsForAccount(account.getId())
                                                 : CompletableFuture.failedFuture(new IllegalStateException("Account update failed")))
+                                        .thenCompose(v -> loginService.clearRateLimit(normalized))
                                         .thenCompose(v -> securityService.logSecurityEvent(account.getId(),
                                                 SecurityEventType.TEMPORARY_PASSWORD_ISSUED, null, "{}"))
                                         .thenApply(v -> {
@@ -163,11 +159,12 @@ public class AuthService {
                 .thenCompose(optAccount -> {
                     if (optAccount.isEmpty()) return CompletableFuture.completedFuture(false);
                     Account account = optAccount.get();
-                    account.unlock();
-                    return accountRepository.update(account)
+                    return accountRepository.unlock(account.getId(), Instant.now())
                             .thenCompose(updated -> updated
-                                    ? securityService.logSecurityEvent(account.getId(),
-                                            SecurityEventType.ACCOUNT_UNLOCKED, null, "{}").thenApply(v -> true)
+                                    ? loginService.clearRateLimit(normalized)
+                                            .thenCompose(v -> securityService.logSecurityEvent(account.getId(),
+                                                    SecurityEventType.ACCOUNT_UNLOCKED, null, "{}"))
+                                            .thenApply(v -> true)
                                     : CompletableFuture.completedFuture(false));
                 });
     }
@@ -185,9 +182,11 @@ public class AuthService {
                     Account account = optAccount.get();
                     return passwordService.hashPasswordAsync(newPassword)
                             .thenCompose(newHash -> {
-                                account.updatePassword(newHash, java.time.Instant.now());
-                                account.unlock();
-                                return accountRepository.update(account)
+                                Instant now = Instant.now();
+                                return accountRepository.updatePasswordHash(account.getId(), newHash, now)
+                                        .thenCompose(updated -> updated
+                                                ? accountRepository.unlock(account.getId(), now)
+                                                : CompletableFuture.completedFuture(false))
                                         .thenCompose(updated -> updated
                                                 ? sessionService.revokeAllSessionsForAccount(account.getId()).thenApply(v -> true)
                                                 : CompletableFuture.completedFuture(false));

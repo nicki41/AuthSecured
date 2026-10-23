@@ -1,19 +1,23 @@
 package io.github.touchfalls.authsecured.paper.command;
 
 import io.github.touchfalls.authsecured.infrastructure.config.ConfigManager;
-import io.github.touchfalls.authsecured.paper.player.PlayerRestrictionManager;
+import io.github.touchfalls.authsecured.ports.UnifiedCommandExecutor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+/**
+ * Parses {@code /authstatus}; the status message lives in
+ * {@link UnifiedCommandExecutor}, shared with Fabric.
+ */
 public class AuthStatusCommand implements CommandExecutor {
 
-    private final PlayerRestrictionManager restrictionManager;
+    private final UnifiedCommandExecutor commandExecutor;
     private final ConfigManager configManager;
 
-    public AuthStatusCommand(PlayerRestrictionManager restrictionManager, ConfigManager configManager) {
-        this.restrictionManager = restrictionManager;
+    public AuthStatusCommand(UnifiedCommandExecutor commandExecutor, ConfigManager configManager) {
+        this.commandExecutor = commandExecutor;
         this.configManager = configManager;
     }
 
@@ -24,15 +28,7 @@ public class AuthStatusCommand implements CommandExecutor {
                     "messages.only-players", "&cOnly players can use this command."));
             return true;
         }
-
-        boolean authenticated = restrictionManager.isAuthenticated(player.getUniqueId());
-        if (authenticated) {
-            player.sendMessage(configManager.getMessage(
-                    "messages.auth-status-authenticated", "&aAuthentication status: authenticated."));
-        } else {
-            player.sendMessage(configManager.getMessage(
-                    "messages.auth-status-required", "&cAuthentication status: login required."));
-        }
+        commandExecutor.executeAuthStatus(player.getUniqueId());
         return true;
     }
 }

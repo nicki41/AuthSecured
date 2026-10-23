@@ -56,7 +56,7 @@ class AuthServiceSecurityTest {
         assertEquals(AuthResult.PASSWORD_UNCHANGED,
                 service.changePassword(uuid, "Player", same, same.clone(), IP).join());
         verify(passwords, never()).hashPasswordAsync(any());
-        verify(accounts, never()).update(any());
+        verify(accounts, never()).updatePasswordHash(any(), any(), any());
     }
 
     @Test
@@ -73,7 +73,7 @@ class AuthServiceSecurityTest {
         assertEquals(AuthResult.RATE_LIMITED, service.changePassword(UUID.randomUUID(), "Player",
                 "guess123456".toCharArray(), "newPassword12".toCharArray(), IP).join());
         verify(passwords, never()).hashPasswordAsync(any());
-        verify(accounts, never()).update(any());
+        verify(accounts, never()).updatePasswordHash(any(), any(), any());
     }
 
     /** End-to-end with a real LoginService: a wrong old password counts as a failed login. */
@@ -99,7 +99,7 @@ class AuthServiceSecurityTest {
                 "guess123456".toCharArray(), "newPassword12".toCharArray(), IP).join());
         verify(accounts).incrementFailedAttemptsAtomic(any(), eq(5), eq(900L), any());
         verify(limits).recordFailedLoginAttempt("player", IP);
-        verify(accounts, never()).update(any());
+        verify(accounts, never()).updatePasswordHash(any(), any(), any());
     }
 
     @Test
@@ -141,7 +141,7 @@ class AuthServiceSecurityTest {
 
         assertEquals(AuthResult.ACCOUNT_LOCKED, service.changePassword(uuid, "Player",
                 "rightPassword1".toCharArray(), "newPassword12".toCharArray(), IP).join());
-        verify(accounts, never()).update(any());
+        verify(accounts, never()).updatePasswordHash(any(), any(), any());
     }
 
     @Test
@@ -163,7 +163,7 @@ class AuthServiceSecurityTest {
 
         assertEquals(AuthResult.TEMPORARY_PASSWORD_EXPIRED, service.changePassword(uuid, "Player",
                 "Temporary123".toCharArray(), "newPassword12".toCharArray(), IP).join());
-        verify(accounts, never()).update(any());
+        verify(accounts, never()).updatePasswordHash(any(), any(), any());
     }
 
     private static RateLimitService permissiveLimits() {
