@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    ignore:
+      # Compiled against the lowest supported server API on purpose.
+      - dependency-name: io.papermc.paper:paper-api
+      # Minecraft, Fabric Loader and Fabric API versions follow SUPPORTED_VERSIONS.md.
+      - dependency-name: com.mojang:minecraft
+      - dependency-name: net.fabricmc:*
+      - dependency-name: net.fabricmc.fabric-api:*
