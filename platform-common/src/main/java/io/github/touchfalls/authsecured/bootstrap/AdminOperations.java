@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /** Shared implementation behind the Paper and Fabric administrative command adapters. */
@@ -94,6 +95,32 @@ public final class AdminOperations {
                     message("messages.admin-doctor-ip-secret-fail",
                             "IP hashing secret comes from a per-server file, but a shared database or "
                                     + "Redis is enabled. Set the same AUTHSECURED_IP_SECRET on every server."));
+            // Without IP binding a session is keyed only by UUID, which an offline-mode server
+            // derives from the player name: anyone joining under that name inherits it.
+            addCheck(lines, !container.getSessionService().isEnabled()
+                            || container.getSessionService().isVerifyIp()
+                            || container.getPlatform().isOnlineMode(),
+                    message("messages.admin-doctor-session-ip-ok", "Session IP binding"),
+                    message("messages.admin-doctor-session-ip-fail",
+                            "Sessions are not bound to the player's IP on an offline-mode server, so anyone "
+                                    + "joining with the same name inherits them. Set session.verify-ip: true."));
+            addCheck(lines, meetsOwaspArgon2Minimum(
+                            container.getConfigManager().getInt("security.password.argon2.memory-kib", 65536),
+                            container.getConfigManager().getInt("security.password.argon2.iterations", 3)),
+                    message("messages.admin-doctor-argon2-ok", "Password hashing cost"),
+                    message("messages.admin-doctor-argon2-fail",
+                            "Argon2 settings are below the OWASP minimum (for example 19456 KiB with 2 "
+                                    + "iterations). Raise security.password.argon2 memory-kib or iterations."));
+            if ("postgresql".equals(container.getDatabaseManager().getDatabaseType())) {
+                String sslMode = postgresSslMode();
+                addCheck(lines, isLoopbackHost(container.getConfigManager().getString(
+                                "database.postgresql.host", "localhost"))
+                                || !Set.of("disable", "allow").contains(sslMode),
+                        message("messages.admin-doctor-database-tls-ok", "Database transport encryption"),
+                        message("messages.admin-doctor-database-tls-fail",
+                                "PostgreSQL on a remote host uses ssl-mode {mode}, which can send data "
+                                        + "unencrypted. Use verify-full.", Map.of("mode", sslMode)));
+            }
             boolean notificationEnabled = container.getConfigManager().getBoolean(
                     "notifications.login-failures.enabled", false);
             boolean discordTarget = container.getConfigManager().getBoolean(
@@ -189,6 +216,32 @@ public final class AdminOperations {
 
     private String message(String key, String fallback, Map<String, String> placeholders) {
         return container.getConfigManager().getMessage(key, fallback, placeholders);
+    }
+
+    /**
+     * OWASP's minimum Argon2id configurations trade memory for iterations: 46 MiB with one
+     * pass, 19 MiB with two, 12 MiB with three, 9 MiB with four or 7 MiB with five.
+     */
+    static boolean meetsOwaspArgon2Minimum(int memoryKib, int iterations) {
+        return (memoryKib >= 47_104 && iterations >= 1)
+                || (memoryKib >= 19_456 && iterations >= 2)
+                || (memoryKib >= 12_288 && iterations >= 3)
+                || (memoryKib >= 9_216 && iterations >= 4)
+                || (memoryKib >= 7_168 && iterations >= 5);
+    }
+
+    private String postgresSslMode() {
+        String fallback = container.getConfigManager().getBoolean("database.postgresql.ssl", false)
+                ? "require" : "prefer";
+        return container.getConfigManager().getString("database.postgresql.ssl-mode", fallback)
+                .toLowerCase(Locale.ROOT);
+    }
+
+    static boolean isLoopbackHost(String host) {
+        if (host == null) return true;
+        String normalized = host.strip().toLowerCase(Locale.ROOT);
+        return normalized.equals("localhost") || normalized.equals("::1") || normalized.equals("[::1]")
+                || normalized.startsWith("127.");
     }
 
     private static String color(boolean healthy) {
