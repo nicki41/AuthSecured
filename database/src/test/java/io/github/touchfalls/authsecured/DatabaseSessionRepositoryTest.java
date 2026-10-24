@@ -91,4 +91,10 @@ class DatabaseSessionRepositoryTest {
             assertEquals(0, rows.getInt(1));
         }
     }
+
+    @Test
+    void databaseWorkRunsOnNamedThreads() throws Exception {
+        String thread = databaseManager.getDbExecutor().submit(() -> Thread.currentThread().getName()).get();
+        assertTrue(thread.startsWith("authsecured-database-"), thread);
+    }
 }

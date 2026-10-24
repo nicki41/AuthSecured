@@ -57,4 +57,23 @@ class PasswordServiceQueueTest {
             service.shutdown();
         }
     }
+
+    @Test
+    void hashingRunsOnNamedDaemonThreads() {
+        PasswordHasher threadReporter = new PasswordHasher() {
+            @Override public String hash(char[] password) {
+                Thread thread = Thread.currentThread();
+                return thread.getName() + ":" + thread.isDaemon();
+            }
+            @Override public boolean verify(char[] password, String expectedHash) { return false; }
+            @Override public String getDummyHash() { return "dummy"; }
+        };
+        PasswordService service = new PasswordService(threadReporter, 1, 128, 2);
+        try {
+            String thread = service.hashPasswordAsync("pw".toCharArray()).join();
+            assertTrue(thread.matches("authsecured-argon2-\\d+:true"), thread);
+        } finally {
+            service.shutdown();
+        }
+    }
 }
