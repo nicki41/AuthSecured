@@ -14,6 +14,7 @@ messages:
   already-registered: "&cEsta cuenta o usuario ya está registrado."
   must-auth: "&c¡Debes autenticarte antes de hacer esto!"
   command-blocked: "&c¡Debes autenticarte antes de usar este comando!"
+  command-alias-unavailable: "&c/{alias} pertenece a otro plugin en este servidor. Usa /{command} en su lugar."
   login-failed: "&cUsuario o contraseña incorrectos."
   old-password-invalid: "&cLa contraseña anterior es incorrecta."
   password-unchanged: "&cLa nueva contraseña debe ser diferente de la actual."
