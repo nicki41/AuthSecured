@@ -133,6 +133,24 @@ public class SqliteAccountRepository implements AccountRepository {
     }
 
     @Override
+    public CompletableFuture<Boolean> replacePasswordHash(Long accountId, String expectedHash, String newPasswordHash,
+                                                          Instant now) {
+        return CompletableFuture.supplyAsync(() -> {
+            String sql = "UPDATE accounts SET password_hash = ?, updated_at = ? WHERE id = ? AND password_hash = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, newPasswordHash);
+                stmt.setString(2, now.toString());
+                stmt.setLong(3, accountId);
+                stmt.setString(4, expectedHash);
+                return stmt.executeUpdate() > 0;
+            } catch (SQLException e) {
+                throw new RuntimeException("Error replacing password hash", e);
+            }
+        }, executor);
+    }
+
+    @Override
     public CompletableFuture<Boolean> unlock(Long accountId, Instant now) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "UPDATE accounts SET status = 'ACTIVE', locked_until = NULL, "

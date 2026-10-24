@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -96,6 +97,21 @@ class SqliteAccountRepositoryTest {
                         UUID.randomUUID(), "PLAYER", "player", "hash"), null).join());
 
         assertTrue(error.getCause() instanceof DuplicateAccountException);
+    }
+
+    @Test
+    void replacePasswordHashOnlyOverwritesTheExpectedHash() {
+        Account account = repository.save(Account.createNew(UUID.randomUUID(), "Rehash", "rehash", "old-hash"), null)
+                .join();
+        Instant changedAt = repository.findByUuid(account.getUuid()).join().orElseThrow().getPasswordChangedAt();
+
+        assertFalse(repository.replacePasswordHash(account.getId(), "stale-hash", "new-hash", Instant.now()).join());
+        assertTrue(repository.replacePasswordHash(account.getId(), "old-hash", "new-hash", Instant.now()).join());
+
+        Account stored = repository.findByUuid(account.getUuid()).join().orElseThrow();
+        assertEquals("new-hash", stored.getPasswordHash());
+        // Not a password change: the change time stays as it was.
+        assertEquals(changedAt, stored.getPasswordChangedAt());
     }
 
     @Test
