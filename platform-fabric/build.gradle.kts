@@ -35,8 +35,8 @@ val fabricApiVersion = fabricApiVersions[minecraftVersion]
 val javaRelease = if (minecraftVersion.startsWith("26.")) 25 else 21
 val shade by configurations.creating {
     // org.sqlite can't be relocated (JNI), and on Knot our copy wins over every other mod's
-    // (Ledger broke with 3.53.x: bogus "ALTER TABLE ... MODIFY COLUMN"). Match the 3.45.x other mods ship.
-    resolutionStrategy.force("org.xerial:sqlite-jdbc:3.45.3.0")
+    // (Ledger broke with 3.53.x: bogus "ALTER TABLE ... MODIFY COLUMN"). Use the 3.49.1.0 EasyAuth ships (verified with Ledger).
+    resolutionStrategy.force("org.xerial:sqlite-jdbc:3.49.1.0")
 }
 
 dependencies {
