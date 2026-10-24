@@ -40,6 +40,10 @@ public class PluginBootstrap {
             this.container.init();
             this.movementLock = new PaperMovementLock(container.getConfigManager());
             restrictionManager.setMovementLock(movementLock);
+            restrictionManager.setCommandListRefresher(playerUuid -> {
+                org.bukkit.entity.Player player = Bukkit.getPlayer(playerUuid);
+                if (player != null) player.updateCommands();
+            });
 
             registerCommands();
             registerListeners();
@@ -48,6 +52,7 @@ public class PluginBootstrap {
             for (org.bukkit.entity.Player player : Bukkit.getOnlinePlayers()) {
                 // Reload with players online: everyone must authenticate again.
                 restrictionManager.setPlayerUnauthenticated(player.getUniqueId(), player.getLocation());
+                player.updateCommands();
             }
         } catch (Throwable failure) {
             // Errors (LinkageError, missing server APIs) must also fail closed: if this method
