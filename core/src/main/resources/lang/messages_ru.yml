@@ -55,6 +55,8 @@ messages:
   admin-operation-failed: "&cНе удалось выполнить операцию. Проверьте журнал сервера."
   admin-account-unlocked: "&aАккаунт разблокирован."
   admin-account-unregistered: "&aРегистрация аккаунта удалена."
+  admin-password-reset-notice: "&cАдминистратор сбросил ваш пароль. Войдите с выданным вам временным паролем."
+  admin-unregistered-notice: "&cАдминистратор удалил ваш аккаунт. Зарегистрируйтесь заново, чтобы продолжить."
   admin-account-not-found-or-failed: "&cАккаунт не найден или не удалось выполнить операцию."
   admin-usage: "&e/authadmin <status|doctor|reload|session|audit|unlock|unregister|resetpassword>"
   admin-state-enabled: "включено"

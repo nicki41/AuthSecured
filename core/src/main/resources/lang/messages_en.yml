@@ -55,6 +55,8 @@ messages:
   admin-operation-failed: "&cOperation failed. Check the server log."
   admin-account-unlocked: "&aAccount unlocked."
   admin-account-unregistered: "&aAccount unregistered."
+  admin-password-reset-notice: "&cAn administrator reset your password. Log in with the temporary password you were given."
+  admin-unregistered-notice: "&cAn administrator deleted your account. Register again to continue."
   admin-account-not-found-or-failed: "&cAccount not found or operation failed."
   admin-usage: "&e/authadmin <status|doctor|reload|session|audit|unlock|unregister|resetpassword>"
   admin-state-enabled: "enabled"

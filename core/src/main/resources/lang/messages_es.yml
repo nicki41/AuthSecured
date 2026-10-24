@@ -55,6 +55,8 @@ messages:
   admin-operation-failed: "&cLa operación falló. Revisa el registro del servidor."
   admin-account-unlocked: "&aCuenta desbloqueada."
   admin-account-unregistered: "&aRegistro de la cuenta eliminado."
+  admin-password-reset-notice: "&cUn administrador restableció tu contraseña. Inicia sesión con la contraseña temporal que te dieron."
+  admin-unregistered-notice: "&cUn administrador eliminó tu cuenta. Regístrate de nuevo para continuar."
   admin-account-not-found-or-failed: "&cNo se encontró la cuenta o la operación falló."
   admin-usage: "&e/authadmin <status|doctor|reload|session|audit|unlock|unregister|resetpassword>"
   admin-state-enabled: "activado"

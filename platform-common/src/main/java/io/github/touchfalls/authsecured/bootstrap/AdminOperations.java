@@ -158,7 +158,26 @@ public final class AdminOperations {
                 "admin.temporary-password.length", 18, 12, 64);
         long expiry = container.getConfigManager().getInt(
                 "admin.temporary-password.expires-seconds", 900, 60, 86_400);
-        return container.getAuthService().issueTemporaryPassword(username, length, expiry);
+        return container.getAuthService().issueTemporaryPassword(username, length, expiry)
+                .thenApply(reset -> {
+                    // The old password no longer works, so neither may a connection that used it.
+                    if (reset != null) {
+                        container.getCommandExecutor().revokeAuthentication(reset.getPlayerUuid(),
+                                "messages.admin-password-reset-notice",
+                                "&cAn administrator reset your password. Log in with the temporary password you were given.");
+                    }
+                    return reset;
+                });
+    }
+
+    public CompletableFuture<Boolean> unregister(String username) {
+        return container.getAuthService().unregisterAccount(username)
+                .thenApply(deleted -> {
+                    deleted.ifPresent(playerUuid -> container.getCommandExecutor().revokeAuthentication(playerUuid,
+                            "messages.admin-unregistered-notice",
+                            "&cAn administrator deleted your account. Register again to continue."));
+                    return deleted.isPresent();
+                });
     }
 
     private List<String> formatAudit(List<AuditEntry> entries, String normalizedUsername) {
