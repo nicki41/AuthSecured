@@ -42,6 +42,9 @@ All notable changes to this project will be documented in this file.
   without quoting, matching Paper; the two-argument commands split the same way Paper's
   command parsing already does.
 - A failed database migration now closes the connection pool instead of leaking it.
+- Fabric: the bundled SQLite driver is pinned to 3.45.3.0 (was 3.53.4.0). The driver cannot be
+  relocated and takes precedence over other mods' copies, and 3.53.x made Ledger fail at
+  startup with `ALTER TABLE players MODIFY COLUMN ...`.
 
 ### Changed
 - Paper's `/login`, `/register`, `/changepassword`, `/logout` and `/authstatus` commands now

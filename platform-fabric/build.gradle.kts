@@ -33,7 +33,11 @@ val fabricApiVersions = mapOf(
 val fabricApiVersion = fabricApiVersions[minecraftVersion]
     ?: error("Unsupported minecraft_version '$minecraftVersion'. See SUPPORTED_VERSIONS.md.")
 val javaRelease = if (minecraftVersion.startsWith("26.")) 25 else 21
-val shade by configurations.creating
+val shade by configurations.creating {
+    // org.sqlite can't be relocated (JNI), and on Knot our copy wins over every other mod's
+    // (Ledger broke with 3.53.x: bogus "ALTER TABLE ... MODIFY COLUMN"). Match the 3.45.x other mods ship.
+    resolutionStrategy.force("org.xerial:sqlite-jdbc:3.45.3.0")
+}
 
 dependencies {
     add("minecraft", "com.mojang:minecraft:$minecraftVersion")
