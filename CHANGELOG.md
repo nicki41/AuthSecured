@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.5] - 2026-10-24
+
+### Fixed
+- Fabric: the bundled SQLite driver is now 3.49.1.0 (was 3.53.4.0). It cannot be relocated and
+  takes precedence over other mods' copies; 3.53.x made Ledger crash at startup with
+  `ALTER TABLE players MODIFY COLUMN ...`.
+
 ## [1.2.4] - 2026-10-23
 
 ### Security
@@ -42,9 +49,6 @@ All notable changes to this project will be documented in this file.
   without quoting, matching Paper; the two-argument commands split the same way Paper's
   command parsing already does.
 - A failed database migration now closes the connection pool instead of leaking it.
-- Fabric: the bundled SQLite driver is pinned to 3.49.1.0 (was 3.53.4.0). The driver cannot be
-  relocated and takes precedence over other mods' copies, and 3.53.x made Ledger fail at
-  startup with `ALTER TABLE players MODIFY COLUMN ...`.
 
 ### Changed
 - Paper's `/login`, `/register`, `/changepassword`, `/logout` and `/authstatus` commands now

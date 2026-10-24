@@ -42,9 +42,6 @@ security and quality audit.
 
 ## Maintenance
 
-- Fabric: the bundled SQLite driver is now version 3.49.1.0 (was 3.53.4.0). It cannot be
-  relocated and takes precedence over other mods' copies; the newer one made Ledger crash on
-  startup with an `ALTER TABLE players MODIFY COLUMN` error.
 - Jackson (pulled in by the database migration library) is now properly relocated inside
   both the Paper and Fabric jars, preventing a conflict with other plugins/mods that bundle a
   different version.
