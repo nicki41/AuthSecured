@@ -13,7 +13,7 @@ dependencies {
     implementation("redis.clients:jedis:5.2.0")
     // slf4j-api is not imported directly here; HikariCP and Jedis already pull it in transitively.
 
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
-    testImplementation("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.3")
+    testImplementation("org.junit.jupiter:junit-jupiter-engine:6.1.3")
     testImplementation("org.mockito:mockito-core:5.11.0")
 }
