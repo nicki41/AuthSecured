@@ -13,8 +13,8 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:${property("paperApiVersion")}")
     compileOnly("org.apache.logging.log4j:log4j-core:2.26.1") { isTransitive = false }
     testImplementation("io.papermc.paper:paper-api:${property("paperApiVersion")}")
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.3")
 }
 
 tasks.processResources {
