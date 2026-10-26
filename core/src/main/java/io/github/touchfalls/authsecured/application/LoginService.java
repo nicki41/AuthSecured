@@ -10,6 +10,7 @@ import io.github.touchfalls.authsecured.util.FailureDiagnostics;
 import io.github.touchfalls.authsecured.util.UsernameNormalizer;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -92,7 +93,10 @@ public class LoginService {
                                     account.getId(), playerUuid, ipHash, "default-server"))
                             .thenCompose(session -> securityService.logLoginAttempt(account.getId(), ipHash, true, "SUCCESS"))
                             .thenCompose(v -> securityService.logSecurityEvent(account.getId(), SecurityEventType.LOGIN_SUCCESS, ipHash, "{}"))
-                            .thenApply(v -> AuthResult.SUCCESS);
+                            .thenApply(v -> {
+                                upgradeHashIfOutdated(account, password);
+                                return AuthResult.SUCCESS;
+                            });
                 }).exceptionally(ex -> {
                     if (logger != null) logger.severe("Login failed internally ("
                             + FailureDiagnostics.causeTypes(ex) + "). Sensitive details are hidden.");
@@ -208,6 +212,29 @@ public class LoginService {
      */
     public CompletableFuture<Void> clearRateLimit(String usernameNormalized) {
         return rateLimitService.recordSuccessfulLogin(usernameNormalized);
+    }
+
+    /**
+     * Re-hashes a just-proven password whose stored hash predates the current Argon2 settings,
+     * so raising the cost in config.yml reaches existing accounts as their owners log in.
+     * Runs in the background and never changes the login result.
+     */
+    private void upgradeHashIfOutdated(Account account, char[] password) {
+        String storedHash = account.getPasswordHash();
+        if (!passwordService.needsRehash(storedHash)) {
+            return;
+        }
+        char[] copy = password.clone();
+        passwordService.hashPasswordAsync(copy)
+                .thenCompose(newHash -> accountRepository.replacePasswordHash(
+                        account.getId(), storedHash, newHash, Instant.now()))
+                .whenComplete((replaced, error) -> {
+                    Arrays.fill(copy, '\0');
+                    if (error != null && logger != null) {
+                        logger.warning("Password hash upgrade failed (" + FailureDiagnostics.causeTypes(error)
+                                + "); the existing hash stays valid.");
+                    }
+                });
     }
 
     private static CredentialCheck rejected(AuthResult result, String normalized) {

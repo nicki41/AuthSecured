@@ -105,6 +105,27 @@ public final class Argon2PasswordHasher implements PasswordHasher {
         }
     }
 
+    /**
+     * A hash needs replacing when its memory, iteration, parallelism, salt or output size
+     * differs from the configured values. Malformed hashes are left to {@link #verify}, which
+     * rejects them.
+     */
+    @Override
+    public boolean needsRehash(String encodedHash) {
+        if (encodedHash == null || !encodedHash.startsWith("$argon2id$") || encodedHash.length() > 512) {
+            return false;
+        }
+        String[] parts = encodedHash.split("\\$", -1);
+        if (parts.length != 6 || !parts[2].equals("v=19")) return false;
+        if (!parts[3].equals("m=" + memoryKib + ",t=" + iterations + ",p=" + parallelism)) return true;
+        try {
+            Base64.Decoder decoder = Base64.getDecoder();
+            return decoder.decode(parts[4]).length != saltLength || decoder.decode(parts[5]).length != hashLength;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
     private boolean malformed(String reason) {
         if (logger != null) logger.warning("Stored Argon2 hash rejected: " + reason + ". Hash details are hidden.");
         return false;

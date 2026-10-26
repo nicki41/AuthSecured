@@ -1,6 +1,7 @@
 package io.github.touchfalls.authsecured;
 
 import io.github.touchfalls.authsecured.application.AuthService;
+import io.github.touchfalls.authsecured.application.AuthenticationTimeoutService;
 import io.github.touchfalls.authsecured.application.SessionService;
 import io.github.touchfalls.authsecured.application.UnifiedCommandServiceImpl;
 import io.github.touchfalls.authsecured.domain.auth.AuthResult;
@@ -16,9 +17,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -228,5 +232,34 @@ class UnifiedCommandServiceTest {
         // Folia has no main thread: the platform must be told whose state changes.
         verify(platform).runTaskForPlayer(eq(playerUuid), any());
         verify(platform, never()).runTaskOnMainThread(any());
+    }
+
+    @Test
+    @DisplayName("Revoking authentication returns an online player to the pre-login state")
+    void revokeAuthenticationRestrictsAnOnlinePlayerAgain() {
+        UUID playerUuid = UUID.randomUUID();
+        when(platform.isPlayerOnline(playerUuid)).thenReturn(true);
+        AuthenticationTimeoutService timeouts = new AuthenticationTimeoutService(true, 5);
+        UnifiedCommandServiceImpl executor = new UnifiedCommandServiceImpl(
+                authService, platform, localizationManager, ipHashService, timeouts);
+
+        executor.revokeAuthentication(playerUuid, "messages.admin-password-reset-notice", "fallback");
+
+        verify(platform).runTaskForPlayer(eq(playerUuid), any());
+        verify(restrictionAdapter).setPlayerUnauthenticated(playerUuid, null);
+        verify(platform).sendMessage(eq(playerUuid), contains("administrator"));
+        assertEquals(List.of(playerUuid), timeouts.drainExpired(Instant.now().plusSeconds(6)));
+    }
+
+    @Test
+    @DisplayName("Revoking authentication ignores a player who is not online")
+    void revokeAuthenticationIgnoresAnOfflinePlayer() {
+        UUID playerUuid = UUID.randomUUID();
+        when(platform.isPlayerOnline(playerUuid)).thenReturn(false);
+
+        commandExecutor.revokeAuthentication(playerUuid, "messages.admin-unregistered-notice", "fallback");
+
+        verify(restrictionAdapter, never()).setPlayerUnauthenticated(any(), any());
+        verify(platform, never()).sendMessage(any(), any());
     }
 }

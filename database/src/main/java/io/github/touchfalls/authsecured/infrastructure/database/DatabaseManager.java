@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class DatabaseManager {
 
@@ -37,7 +38,10 @@ public final class DatabaseManager {
                            String sslMode) {
         this.logger = logger;
         this.dbType = dbType.toLowerCase(Locale.ROOT);
-        this.dbExecutor = Executors.newFixedThreadPool(Math.max(2, poolSize));
+        AtomicInteger threadNumber = new AtomicInteger();
+        // Not daemon threads: queued writes such as audit records still finish during shutdown.
+        this.dbExecutor = Executors.newFixedThreadPool(Math.max(2, poolSize), runnable ->
+                new Thread(runnable, "authsecured-database-" + threadNumber.incrementAndGet()));
         initDataSource(host, port, database, username, password, sqlitePath, poolSize, sslMode);
     }
 

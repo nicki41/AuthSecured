@@ -174,7 +174,7 @@ public final class FabricCommandRegistration {
                 mod.getContainer().getAuthService().unlockAccount(player),
                 "messages.admin-account-unlocked", "&aAccount unlocked."));
         root.then(playerBooleanCommand(mod, "unregister", 4, player ->
-                mod.getContainer().getAuthService().unregister(player),
+                operations(mod).unregister(player),
                 "messages.admin-account-unregistered", "&aAccount unregistered."));
 
         root.then(Commands.literal("resetpassword")

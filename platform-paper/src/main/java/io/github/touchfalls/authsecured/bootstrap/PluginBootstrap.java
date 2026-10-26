@@ -41,8 +41,12 @@ public class PluginBootstrap {
 
             this.container = new DependencyContainer(platform);
             this.container.init();
-            this.movementLock = new PaperMovementLock(container.getConfigManager(), scheduler);
+            this.movementLock = new PaperMovementLock(container.getConfigManager());
             restrictionManager.setMovementLock(movementLock);
+            restrictionManager.setCommandListRefresher(playerUuid -> {
+                org.bukkit.entity.Player player = Bukkit.getPlayer(playerUuid);
+                if (player != null) player.updateCommands();
+            });
 
             registerCommands();
             registerListeners();
@@ -50,8 +54,10 @@ public class PluginBootstrap {
             registerMaintenanceTask();
             for (org.bukkit.entity.Player player : Bukkit.getOnlinePlayers()) {
                 // Reload with players online: everyone must authenticate again.
-                scheduler.runOrSchedule(player, () ->
-                        restrictionManager.setPlayerUnauthenticated(player.getUniqueId(), player.getLocation()));
+                scheduler.runOrSchedule(player, () -> {
+                    restrictionManager.setPlayerUnauthenticated(player.getUniqueId(), player.getLocation());
+                    player.updateCommands();
+                });
             }
         } catch (Throwable failure) {
             // Errors (LinkageError, missing server APIs) must also fail closed: if this method
@@ -84,11 +90,15 @@ public class PluginBootstrap {
     }
 
     public void disable() {
-        if (movementLock != null) {
-            movementLock.unlockAll();
-        }
-        if (container != null) {
-            container.close();
+        try {
+            if (movementLock != null) {
+                movementLock.unlockAll();
+            }
+        } finally {
+            // The database pool and hash threads must close even if restoring speeds fails.
+            if (container != null) {
+                container.close();
+            }
         }
         if (sensitiveCommandLogFilter != null) {
             sensitiveCommandLogFilter.close();
@@ -127,6 +137,7 @@ public class PluginBootstrap {
         ), plugin);
     }
 
+    @SuppressWarnings("deprecation") // getPluginMeta() is Paper-only; Spigot needs getDescription().
     private void registerCommands() {
         registerCmd("login", new LoginCommand(container.getCommandExecutor(), container.getConfigManager()));
         registerCmd("register", new RegisterCommand(container.getCommandExecutor(), container.getConfigManager()));
@@ -139,12 +150,29 @@ public class PluginBootstrap {
         }
         registerCmd("logout", new LogoutCommand(container.getCommandExecutor(), container.getConfigManager()));
         registerCmd("authstatus", new AuthStatusCommand(container.getCommandExecutor(), container.getConfigManager()));
-        java.util.Set<String> passwordAliases = new java.util.HashSet<>();
+        java.util.Map<String, String> declaredLabels = PaperSensitiveCommandListener.declaredPasswordLabels(
+                plugin.getDescription().getCommands());
+        // Declared aliases stay password commands even when another plugin registered them first
+        // (Bukkit then drops them from the active aliases): players still type them with a password.
+        java.util.Set<String> passwordAliases = new java.util.HashSet<>(declaredLabels.keySet());
         for (String commandName : java.util.List.of("login", "register", "changepassword")) {
             PluginCommand command = plugin.getCommand(commandName);
             if (command != null) passwordAliases.addAll(command.getAliases());
         }
         SecretRedactor.registerPasswordAliases(passwordAliases);
+        warnAboutUnavailableAliases(declaredLabels);
+    }
+
+    private void warnAboutUnavailableAliases(java.util.Map<String, String> declaredLabels) {
+        declaredLabels.forEach((alias, canonical) -> {
+            PluginCommand command = plugin.getCommand(canonical);
+            if (alias.equals(canonical) || command == null
+                    || command.getAliases().stream().anyMatch(alias::equalsIgnoreCase)) {
+                return;
+            }
+            plugin.getLogger().warning("Command alias /" + alias + " is already registered by another plugin. "
+                    + "Players who have not logged in are told to use /" + canonical + " instead.");
+        });
     }
 
     private void registerAuthenticationTimeoutTask() {

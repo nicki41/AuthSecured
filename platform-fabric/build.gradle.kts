@@ -33,7 +33,11 @@ val fabricApiVersions = mapOf(
 val fabricApiVersion = fabricApiVersions[minecraftVersion]
     ?: error("Unsupported minecraft_version '$minecraftVersion'. See SUPPORTED_VERSIONS.md.")
 val javaRelease = if (minecraftVersion.startsWith("26.")) 25 else 21
-val shade by configurations.creating
+val shade by configurations.creating {
+    // org.sqlite can't be relocated (JNI), and on Knot our copy wins over every other mod's
+    // (Ledger broke with 3.53.x: bogus "ALTER TABLE ... MODIFY COLUMN"). Use the 3.49.1.0 EasyAuth ships (verified with Ledger).
+    resolutionStrategy.force("org.xerial:sqlite-jdbc:3.49.1.0")
+}
 
 dependencies {
     add("minecraft", "com.mojang:minecraft:$minecraftVersion")
@@ -57,8 +61,8 @@ dependencies {
     shade(project(":database"))
     shade(project(":platform-common"))
 
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.3")
 }
 
 java {

@@ -14,8 +14,11 @@ import io.github.touchfalls.authsecured.paper.scheduler.PaperScheduler;
 import org.bukkit.entity.Player;
 
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Executes password-bearing player commands before normal dispatch. Canceling
@@ -25,6 +28,7 @@ public final class PaperSensitiveCommandListener implements Listener {
 
     private static final List<String> DEFAULT_ALLOWED = List.of(
             "/login", "/l", "/register", "/reg", "/changepassword", "/cp");
+    private static final List<String> PASSWORD_COMMANDS = List.of("login", "register", "changepassword");
 
     private final JavaPlugin plugin;
     private final PlayerRestrictionManager restrictionManager;
@@ -47,7 +51,11 @@ public final class PaperSensitiveCommandListener implements Listener {
         }
 
         PluginCommand command = resolvePasswordCommand(parsed.label());
-        CommandExecutor executor = command == null ? null : command.getExecutor();
+        if (command == null) {
+            blockUnavailableAliasBeforeLogin(event, parsed.label());
+            return;
+        }
+        CommandExecutor executor = command.getExecutor();
         if (executor == null) {
             return;
         }
@@ -62,6 +70,30 @@ public final class PaperSensitiveCommandListener implements Listener {
         PluginCommand selectedCommand = command;
         scheduler.schedule(event.getPlayer(), () -> executor.onCommand(
                 event.getPlayer(), selectedCommand, parsed.label(), parsed.arguments()));
+    }
+
+    /**
+     * An alias from plugin.yml that another plugin registered first is not active and resolves
+     * to that plugin. A player who has not logged in yet and types it means to log in, so the
+     * password must not reach the other plugin.
+     */
+    @SuppressWarnings("deprecation") // getPluginMeta() is Paper-only; Spigot needs getDescription().
+    private void blockUnavailableAliasBeforeLogin(PlayerCommandPreprocessEvent event, String label) {
+        Player player = event.getPlayer();
+        if (restrictionManager == null || restrictionManager.isAuthenticated(player.getUniqueId())) {
+            return;
+        }
+        String canonical = declaredPasswordLabels(plugin.getDescription().getCommands()).get(label);
+        if (canonical == null) {
+            return;
+        }
+        event.setMessage("/" + label + " [REDACTED]");
+        event.setCancelled(true);
+        if (configManager != null) {
+            player.sendMessage(configManager.getMessage("messages.command-alias-unavailable",
+                    "&c/{alias} belongs to another plugin on this server. Use /{command} instead.",
+                    Map.of("alias", label, "command", canonical)));
+        }
     }
 
     /** Password commands bypass normal dispatch, so the pre-login allow-list is enforced here as well. */
@@ -80,7 +112,7 @@ public final class PaperSensitiveCommandListener implements Listener {
     }
 
     private PluginCommand resolvePasswordCommand(String label) {
-        for (String canonical : java.util.List.of("login", "register", "changepassword")) {
+        for (String canonical : PASSWORD_COMMANDS) {
             PluginCommand command = plugin.getCommand(canonical);
             if (command != null && (canonical.equals(label)
                     || command.getAliases().stream().anyMatch(alias -> alias.equalsIgnoreCase(label)))) {
@@ -88,6 +120,27 @@ public final class PaperSensitiveCommandListener implements Listener {
             }
         }
         return null;
+    }
+
+    /**
+     * Maps every label plugin.yml declares for a password command, aliases included, to the
+     * command's name, whether or not the alias could be registered.
+     */
+    public static Map<String, String> declaredPasswordLabels(Map<String, Map<String, Object>> commands) {
+        Map<String, String> labels = new HashMap<>();
+        for (String canonical : PASSWORD_COMMANDS) {
+            labels.put(canonical, canonical);
+            Map<String, Object> definition = commands == null ? null : commands.get(canonical);
+            Object aliases = definition == null ? null : definition.get("aliases");
+            if (aliases instanceof String alias) {
+                labels.put(alias.toLowerCase(Locale.ROOT), canonical);
+            } else if (aliases instanceof Collection<?> list) {
+                for (Object alias : list) {
+                    if (alias != null) labels.put(alias.toString().toLowerCase(Locale.ROOT), canonical);
+                }
+            }
+        }
+        return labels;
     }
 
     static ParsedCommand parse(String message) {
