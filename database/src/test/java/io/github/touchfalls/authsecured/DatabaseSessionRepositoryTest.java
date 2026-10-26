@@ -117,4 +117,10 @@ class DatabaseSessionRepositoryTest {
         assertEquals(expired.getExpiresAt(), repository.findById(expired.getId()).join().orElseThrow().getExpiresAt());
         assertEquals(revoked.getExpiresAt(), repository.findById(revoked.getId()).join().orElseThrow().getExpiresAt());
     }
+
+    @Test
+    void databaseWorkRunsOnNamedThreads() throws Exception {
+        String thread = databaseManager.getDbExecutor().submit(() -> Thread.currentThread().getName()).get();
+        assertTrue(thread.startsWith("authsecured-database-"), thread);
+    }
 }

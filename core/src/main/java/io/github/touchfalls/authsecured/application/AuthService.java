@@ -131,7 +131,7 @@ public class AuthService {
                                                 SecurityEventType.TEMPORARY_PASSWORD_ISSUED, null, "{}"))
                                         .thenApply(v -> {
                                             TemporaryPasswordReset reset = new TemporaryPasswordReset(
-                                                    temporaryPassword, expiresAt);
+                                                    account.getUuid(), temporaryPassword, expiresAt);
                                             Arrays.fill(temporaryPassword, '\0');
                                             return reset;
                                         });
@@ -195,17 +195,23 @@ public class AuthService {
     }
 
     public CompletableFuture<Boolean> unregister(String username) {
+        return unregisterAccount(username).thenApply(Optional::isPresent);
+    }
+
+    /** Deletes the account and revokes its sessions; yields the owner's UUID if an account was deleted. */
+    public CompletableFuture<Optional<UUID>> unregisterAccount(String username) {
         String normalized = UsernameNormalizer.normalize(username);
         return accountRepository.findByUsernameNormalized(normalized)
                 .thenCompose(optAccount -> {
-                    if (optAccount.isEmpty()) return CompletableFuture.completedFuture(false);
+                    if (optAccount.isEmpty()) return CompletableFuture.completedFuture(Optional.<UUID>empty());
                     Account account = optAccount.get();
                     return accountRepository.delete(account.getUuid())
                             .thenCompose(deleted -> {
                                 if (deleted) {
-                                    return sessionService.revokeAllSessionsForAccount(account.getId()).thenApply(v -> true);
+                                    return sessionService.revokeAllSessionsForAccount(account.getId())
+                                            .thenApply(v -> Optional.of(account.getUuid()));
                                 }
-                                return CompletableFuture.completedFuture(false);
+                                return CompletableFuture.completedFuture(Optional.<UUID>empty());
                             });
                 });
     }

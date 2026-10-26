@@ -29,4 +29,27 @@ class PaperSensitiveCommandListenerTest {
         assertFalse(PaperSensitiveCommandListener.isAllowed("changepassword", allowed));
         assertFalse(PaperSensitiveCommandListener.isAllowed("cp", allowed));
     }
+
+    @Test
+    void declaredPasswordLabelsIncludeAliasesInEitherYamlForm() {
+        java.util.Map<String, java.util.Map<String, Object>> commands = java.util.Map.of(
+                "login", java.util.Map.of("aliases", java.util.List.of("l", "LOG")),
+                "register", java.util.Map.of("aliases", "reg"),
+                "changepassword", java.util.Map.of());
+
+        java.util.Map<String, String> labels = PaperSensitiveCommandListener.declaredPasswordLabels(commands);
+
+        assertEquals("login", labels.get("l"));
+        assertEquals("login", labels.get("log"));
+        assertEquals("register", labels.get("reg"));
+        assertEquals("changepassword", labels.get("changepassword"));
+        assertNull(labels.get("cp"));
+    }
+
+    @Test
+    void declaredPasswordLabelsToleratesMissingCommandDefinitions() {
+        java.util.Map<String, String> labels = PaperSensitiveCommandListener.declaredPasswordLabels(null);
+
+        assertEquals(java.util.Set.of("login", "register", "changepassword"), labels.keySet());
+    }
 }

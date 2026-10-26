@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.6] - 2026-10-24
+
+### Added
+- `/authadmin doctor` reports three more risky settings: IP-unbound sessions on an offline-mode
+  server, Argon2 parameters below the OWASP minimum, and unencrypted PostgreSQL to a remote
+  host (translated into all bundled languages). Thanks to @nicki41.
+
+### Security
+- `/authadmin resetpassword` and `/authadmin unregister` now also end the in-game authentication
+  of an online account owner (Paper and Fabric), so a compromised account loses access at once.
+  Thanks to @nicki41.
+- Paper: password-command aliases that another plugin already owns (for example `/l`) stay
+  protected: the console-log redaction and the pre-login interception no longer miss them.
+  Thanks to @nicki41.
+- Paper: players who have not logged in only see the commands in `restrictions.allowed-commands`
+  in their command list and tab completion; the list is re-sent on login and logout. Thanks to
+  @nicki41.
+
+### Changed
+- Passwords hashed with outdated Argon2 settings are re-hashed with the current ones after a
+  successful login. Thanks to @nicki41.
+- GitHub Actions now builds and tests the Paper jar and every Fabric target on each push and
+  pull request. Thanks to @nicki41.
+- The Argon2 and database worker threads now have descriptive names (`authsecured-argon2-N`,
+  `authsecured-database-N`) for thread dumps and profilers; Argon2 workers are daemon threads.
+  Thanks to @nicki41.
+
+### Contributors
+- Thanks to [@nicki41](https://github.com/nicki41) for the doctor checks (#8), hiding commands
+  before login on Paper (#9), the worker thread names (#10), re-hashing on login (#7), the
+  command alias protection (#4), ending authentication on admin reset/unregister (#3) and the
+  GitHub Actions build (#5).
+
+## [1.2.5] - 2026-10-24
+
+### Fixed
+- Fabric: the bundled SQLite driver is now 3.49.1.0 (was 3.53.4.0). It cannot be relocated and
+  takes precedence over other mods' copies; 3.53.x made Ledger crash at startup with
+  `ALTER TABLE players MODIFY COLUMN ...`.
+
 ## [1.2.4] - 2026-10-23
 
 ### Security

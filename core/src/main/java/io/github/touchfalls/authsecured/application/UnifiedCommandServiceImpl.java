@@ -212,6 +212,20 @@ public class UnifiedCommandServiceImpl implements UnifiedCommandExecutor {
         platform.sendMessage(playerUuid, message);
     }
 
+    @Override
+    public void revokeAuthentication(UUID playerUuid, String messageKey, String fallbackMessage) {
+        if (playerUuid == null) return;
+        platform.runTaskOnMainThread(() -> {
+            if (!platform.isPlayerOnline(playerUuid)) return;
+            platform.getRestrictionAdapter().setPlayerUnauthenticated(playerUuid, null);
+            if (authenticationTimeoutService != null) {
+                // Keeps the deadline of a player who was still logging in; starts one otherwise.
+                authenticationTimeoutService.ensureStarted(playerUuid);
+            }
+            platform.sendMessage(playerUuid, localizationManager.getMessage(messageKey, fallbackMessage));
+        });
+    }
+
     private void clearAuthenticationTimeout(UUID playerUuid) {
         if (authenticationTimeoutService != null) {
             authenticationTimeoutService.clear(playerUuid);

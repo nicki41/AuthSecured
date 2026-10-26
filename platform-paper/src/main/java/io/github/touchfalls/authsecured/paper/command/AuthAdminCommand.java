@@ -66,7 +66,7 @@ public final class AuthAdminCommand implements TabExecutor {
                     target -> container.getAuthService().unlockAccount(target),
                     "messages.admin-account-unlocked", "&aAccount unlocked.");
             case "unregister" -> handlePlayerBoolean(sender, args, "unregister",
-                    target -> container.getAuthService().unregister(target),
+                    operations::unregister,
                     "messages.admin-account-unregistered", "&aAccount unregistered.");
             case "resetpassword" -> handleTemporaryPassword(sender, args);
             default -> sendUsage(sender);

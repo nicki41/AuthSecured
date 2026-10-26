@@ -285,6 +285,10 @@ public final class DependencyContainer implements AutoCloseable {
         }
     }
 
+    public AuthPlatform getPlatform() {
+        return platform;
+    }
+
     public MaintenanceService getMaintenanceService() {
         return maintenanceService;
     }

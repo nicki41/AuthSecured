@@ -14,4 +14,11 @@ public interface UnifiedCommandExecutor {
                                                   char[] newPassword, String ipAddress);
     CompletableFuture<Void> executeLogout(UUID playerUuid);
     void executeAuthStatus(UUID playerUuid);
+
+    /**
+     * Returns an online player to the pre-login state after an administrator invalidated
+     * their credentials, so a connection that authenticated earlier cannot outlive them.
+     * Does nothing if the player is offline.
+     */
+    void revokeAuthentication(UUID playerUuid, String messageKey, String fallbackMessage);
 }

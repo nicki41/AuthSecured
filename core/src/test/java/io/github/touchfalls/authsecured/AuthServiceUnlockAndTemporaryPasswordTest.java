@@ -63,6 +63,27 @@ class AuthServiceUnlockAndTemporaryPasswordTest {
 
         TemporaryPasswordReset reset = service.issueTemporaryPassword("Player", 18, 900).join();
         assertEquals(18, reset.copyPassword().length);
+        // Lets the caller end the in-game authentication of the account owner.
+        assertEquals(uuid, reset.getPlayerUuid());
         verify(login).clearRateLimit("player");
+    }
+
+    @Test
+    void unregisterAccountReportsTheOwnerOfTheDeletedAccount() {
+        AccountRepository accounts = mock(AccountRepository.class);
+        SessionService sessions = mock(SessionService.class);
+        UUID uuid = UUID.randomUUID();
+        Account account = Account.createNew(uuid, "Player", "player", "hash");
+        when(accounts.findByUsernameNormalized("player")).thenReturn(CompletableFuture.completedFuture(Optional.of(account)));
+        when(accounts.findByUsernameNormalized("missing")).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
+        when(accounts.delete(uuid)).thenReturn(CompletableFuture.completedFuture(true));
+        when(sessions.revokeAllSessionsForAccount(account.getId())).thenReturn(CompletableFuture.completedFuture(null));
+
+        AuthService service = new AuthService(mock(RegistrationService.class), mock(LoginService.class),
+                mock(PasswordService.class), sessions, mock(SecurityService.class), accounts);
+
+        assertEquals(Optional.of(uuid), service.unregisterAccount("Player").join());
+        assertEquals(Optional.empty(), service.unregisterAccount("missing").join());
+        verify(sessions).revokeAllSessionsForAccount(account.getId());
     }
 }

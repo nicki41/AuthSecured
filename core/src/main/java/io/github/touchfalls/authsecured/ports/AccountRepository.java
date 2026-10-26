@@ -22,6 +22,14 @@ public interface AccountRepository {
     CompletableFuture<Boolean> resetFailedAttemptsAtomic(Long accountId, Instant now);
     /** Updates only the password, clearing any pending temporary-password state. Leaves lock state untouched. */
     CompletableFuture<Boolean> updatePasswordHash(Long accountId, String newPasswordHash, Instant now);
+    /**
+     * Swaps the stored hash of an unchanged password for one with current cost settings.
+     * Writes only if the stored hash still equals {@code expectedHash}, so a password change
+     * made in the meantime is never overwritten; every other column, including the
+     * password-change time, stays as it is.
+     */
+    CompletableFuture<Boolean> replacePasswordHash(Long accountId, String expectedHash, String newPasswordHash,
+                                                   Instant now);
     /** Clears lock and failed-attempt state. Leaves the password hash untouched. */
     CompletableFuture<Boolean> unlock(Long accountId, Instant now);
     /** Sets a temporary password and clears lock/failed-attempt state in one write. */
